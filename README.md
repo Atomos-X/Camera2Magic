@@ -16,7 +16,6 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
     - [x] 裁切图像适配 `preview surface` ratio，尽可能不会拉伸变形  
     - [x] 适配目标应用实时切换 ratio    
   - [x] 生成 `nv21 byte[]`   
-    - [x] nv21数据模拟camera数据源，控制面板看到nv21数据的预览图应该是横着  
     - [x] `camera1 api` 拍照 使用当前 nv21 bytes数据(默认)   
     - [x] 强制将 `nv21 data`转换为`视觉正向`（默认）
     - [ ] 使用指定图片替换拍照数据 ？ 
@@ -37,23 +36,23 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
     - [x] 播放音频开关  
     - [x] 打印日志开关（错误日志依然会打印） 
     - [x] 注入浮动面板开关  
-    - [x] ~~强制nv21数据竖屏~~ (不再需要)  
+    - [x] 强制hook所有工作模式 
     
 - 文档  
   - [ ] 详细的文档
     
     
 **请不要用于非法用途**  
-  
-需要 root，lsposed，在lsposed manager中开启模块，勾选作用域，然后杀掉目标应用的进程，再重新打开。  
-  
+
+## 使用教程
 视频文件需要放在本地公共存储目录，大部分拥有相机功能的app都能访问。如： `DCIM`、`MOVIES`等。  
+手机需要`root`并安装`lsposed模块`，在`lsposed manager`中启用模块，勾选作用域(tiktok,telegram,wechat...)，强制关闭该应用，重新打开。   
+打开本模块App，选择一个视频文件（根据需要，启用声音等其他功能）。  
+打开被Hook的应用，使用相机功能，应该能看到预览画面被你的视频替换了。  
+  
   
 **视频**   
   
-测试用机器: oneplus 8T (colorOS port 16.0, [刷机群tg](http://t.me/coloros_port_sm8250))  
-  
-https://github.com/user-attachments/assets/3ad33666-85a7-453d-a761-1f46ede016d9
-
+测试用机器: oneplus 8T (colorOS port 16.0, [刷机群tg](http://t.me/coloros_port_sm8250))
 
 
