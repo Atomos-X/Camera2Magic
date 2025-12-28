@@ -28,7 +28,7 @@ android {
     compileSdk {
         version = release(36)
     }
-    ndkVersion = "27.0.12077973"
+//    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId "com.nothing.camera2magic"
@@ -37,12 +37,12 @@ android {
         versionCode getVersionCodeFromGit()
         versionName "0.6." + gitCommitHash
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += ""
-                arguments "-DANDROID_PLATFORM=android-29"
-            }
-        }
+//        externalNativeBuild {
+//            cmake {
+//                cppFlags += ""
+//                arguments "-DANDROID_PLATFORM=android-29"
+//            }
+//        }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -70,12 +70,12 @@ android {
         jvmTarget = '11'
     }
 
-    externalNativeBuild {
-        cmake {
-            path file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+//    externalNativeBuild {
+//        cmake {
+//            path file("src/main/cpp/CMakeLists.txt")
+//            version = "3.22.1"
+//        }
+//    }
 
     buildFeatures {
         compose true
