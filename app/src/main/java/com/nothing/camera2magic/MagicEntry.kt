@@ -30,6 +30,7 @@ class MagicEntry : IXposedHookLoadPackage {
     external fun nativeInit()
     companion object {
         private const val TAG = "[MAGIC]"
+        private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
         @Volatile
         var lastRegisteredSurface: Surface? = null
         val surfaceLock = Any()
@@ -63,11 +64,7 @@ class MagicEntry : IXposedHookLoadPackage {
         }
     }
 
-    fun logAndSendCameraParameters(
-        cameraId: String,
-        overrideWidth: Int = 0,
-        overrideHeight: Int = 0
-    ) {
+    fun logAndSendCameraParameters(cameraId: String, overrideWidth: Int = 0, overrideHeight: Int = 0) {
 
         val now = System.currentTimeMillis()
         val isExplicitUpdate = overrideWidth > 0
@@ -105,7 +102,7 @@ class MagicEntry : IXposedHookLoadPackage {
 
     override fun handleLoadPackage(lpparam: LoadPackageParam) {
 
-        if (lpparam.packageName == MagicNative.MODULE_PACKAGE_NAME) return
+        if (lpparam.packageName == MODULE_PACKAGE_NAME) return
 
         XposedHelpers.findAndHookMethod(
             Application::class.java,
