@@ -40,7 +40,7 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
     - [x] ~~强制nv21数据竖屏~~ (不再需要)  
     
 - 文档  
-  - [ ] 详细的文档  
+  - [ ] 详细的文档
     
     
 **请不要用于非法用途**  
@@ -48,7 +48,9 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
 需要 root，lsposed，在lsposed manager中开启模块，勾选作用域，然后杀掉目标应用的进程，再重新打开。  
   
 视频文件需要放在本地公共存储目录，大部分拥有相机功能的app都能访问。如： `DCIM`、`MOVIES`等。  
-**视频**  
+  
+**视频**   
+  
 测试用机器: oneplus 8T (colorOS port 16.0, [刷机群tg](http://t.me/coloros_port_sm8250))  
   
 https://github.com/user-attachments/assets/3ad33666-85a7-453d-a761-1f46ede016d9
