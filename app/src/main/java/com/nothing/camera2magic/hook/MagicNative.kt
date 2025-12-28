@@ -10,8 +10,12 @@ import com.nothing.camera2magic.GlobalHookState
 import com.nothing.camera2magic.ui.theme.PreviewNV21Helper
 import de.robv.android.xposed.XSharedPreferences
 
-object MagicNative {
+data class MagicConfig (
+    val playSound: Boolean = false,
+    val enableLog: Boolean = false,
+)
 
+object MagicNative {
     private const val LOG_PREFIX = "[Magic]"
     private const val TAG = "[NATIVE]"
     private const val KEY_VIDEO_ID = "video_id"
@@ -19,41 +23,35 @@ object MagicNative {
     private const val KEY_PLAY_SOUND = "play_sound"
     private const val KEY_ENABLE_LOG = "enable_log"
     private const val KEY_INJECT_MENU_ENABLED = "inject_menu"
-    private const val KEY_FORCE_NV21_PORTRAIT = "force_nv21_portrait"
     private const val PREFS_NAME = "virtual_camera_x_prefs"
-    const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
+    private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
 
     private val prefs: XSharedPreferences = XSharedPreferences(MODULE_PACKAGE_NAME, PREFS_NAME)
 
     private var videoID: String? = null
+    private var cachedBuffer: ByteArray? = null
+
+    var lastFrameWidth = 0
+    var lastFrameHeight = 0
+
+    var camera1Callback: Camera.PreviewCallback? = null
+    var currentCamera1: Camera? = null
+    var previewCallback: ((data: ByteArray, width: Int, height: Int) -> Unit)? = null
 
     @Volatile
     var moduleEnabled: Boolean = true
         private set
-
-    @get:JvmStatic @Volatile
-    var playSoundEnabled: Boolean = false
-        private set
-    @get:JvmStatic @Volatile
+    @Volatile
     var enableLog: Boolean = false
         private set
     @Volatile
     var injectMenuEnabled: Boolean = false
         private set
     @Volatile
-    var videoSourceIsReady = false
+    var videoSourceIsReady: Boolean = false
         private set
-
     @Volatile
     var hasValidFrame = false
-    var lastFrameWidth = 0
-    var lastFrameHeight = 0
-
-    private var cachedBuffer: ByteArray? = null
-
-    var camera1Callback: Camera.PreviewCallback? = null
-    var currentCamera1: Camera? = null
-    var previewCallback: ((data: ByteArray, width: Int, height: Int) -> Unit)? = null
 
     @JvmStatic
     fun ensureBuffer(size: Int) {
@@ -69,7 +67,46 @@ object MagicNative {
     }
 
     @JvmStatic
+    fun onFrameDataUpdated(width: Int, height: Int) {
+        lastFrameWidth = width;
+        lastFrameHeight = height;
+        hasValidFrame = true;
+        val buffer = cachedBuffer ?: return
+        val expectedSize = width * height *3 / 2
+        if (buffer.size < expectedSize) return
+
+        PreviewNV21Helper.processFrame(buffer,width,height) { bitmap ->
+            FloatWindowManager.updatePreview(bitmap)
+        }
+
+        try {
+            if (camera1Callback != null && currentCamera1 != null) {
+                camera1Callback?.onPreviewFrame(buffer, currentCamera1)
+            }
+        } catch (e: Exception) {
+            logDog("VCX", "Error in Camera1 callback: ${e.message}", enableLog)
+        }
+        // 分发给 camera2
+        previewCallback?.invoke(buffer, width, height);
+    }
+    @JvmStatic
+    external fun getApiLevel(apiLevel: Int)
+    @JvmStatic
+    external fun updateNativeConfig(config: MagicConfig)
+    @JvmStatic
+    external fun updateCameraParameters(cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int)
+    @JvmStatic
+    external fun setDisplayOrientation(orientation: Int)
+    @JvmStatic
+    external fun registerSurface(surface: Surface)
+    @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray
+    @JvmStatic
+    external fun updateExternalMatrix(matrix: FloatArray)
+    @JvmStatic
+    external fun resetVideoSource()
+    @JvmStatic
+    external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
 
     fun logDog(tag: String, message: String, enabled: Boolean) {
         if (enabled) {
@@ -80,14 +117,17 @@ object MagicNative {
     fun refreshPrefs() {
         try {
             prefs.reload()
+            val config = MagicConfig(
+                playSound = prefs.getBoolean(KEY_PLAY_SOUND, false),
+                enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false),
+            )
+            enableLog = config.enableLog
             videoID = prefs.getString(KEY_VIDEO_ID, null)
-            moduleEnabled= prefs.getBoolean(KEY_MODULE_ENABLED, true)
-            playSoundEnabled = prefs.getBoolean(KEY_PLAY_SOUND, false)
-            enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false)
+            moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
             injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU_ENABLED, false)
+            updateNativeConfig(config)
         } catch (e: Exception) { /* Do Nothing */ }
     }
-
 
     fun updateVideoSource() {
         val context = GlobalHookState.applicationContext ?: return
@@ -146,30 +186,6 @@ object MagicNative {
         }
     }
 
-    @JvmStatic
-    fun onFrameDataUpdated(width: Int, height: Int) {
-        lastFrameWidth = width;
-        lastFrameHeight = height;
-        hasValidFrame = true;
-        val buffer = cachedBuffer ?: return
-        val expectedSize = width * height *3 / 2
-        if (buffer.size < expectedSize) return
-
-        PreviewNV21Helper.processFrame(buffer,width,height) { bitmap ->
-            FloatWindowManager.updatePreview(bitmap)
-        }
-
-        try {
-            if (camera1Callback != null && currentCamera1 != null) {
-                camera1Callback?.onPreviewFrame(buffer, currentCamera1)
-            }
-        } catch (e: Exception) {
-            logDog("VCX", "Error in Camera1 callback: ${e.message}", enableLog)
-        }
-        // 分发给 camera2
-        previewCallback?.invoke(buffer, width, height);
-    }
-
     fun getFrameSnapshot(): Triple<ByteArray, Int, Int>? {
         if (!hasValidFrame) return null
 
@@ -182,21 +198,4 @@ object MagicNative {
 
         return Triple(clone, w, h)
     }
-
-    @JvmStatic
-    external fun getApiLevel(apiLevel: Int)
-    @JvmStatic
-    external fun setNativeLogEnabled(enabled: Boolean)
-    @JvmStatic
-    external fun updateCameraParameters(cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int)
-    @JvmStatic
-    external fun setDisplayOrientation(orientation: Int)
-    @JvmStatic
-    external fun registerSurface(surface: Surface)
-    @JvmStatic
-    external fun updateExternalMatrix(matrix: FloatArray)
-    @JvmStatic
-    external fun resetVideoSource()
-    @JvmStatic
-    external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
 }

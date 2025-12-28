@@ -7,6 +7,8 @@ import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.os.Handler
 import android.view.Surface
+import android.widget.Toast
+import com.nothing.camera2magic.GlobalHookState
 import com.nothing.camera2magic.MagicEntry
 import com.nothing.camera2magic.hook.MagicNative.getApiLevel
 import com.nothing.camera2magic.hook.MagicNative.logDog as DOG

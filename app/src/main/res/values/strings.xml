@@ -14,5 +14,9 @@
     <string name="play_sound_button_name">Play Sound</string>
     <string name="enable_log_button_name">Enable Log</string>
     <string name="inject_control_button_name">Inject Menu</string>
-    <string name="force_nv21_portrait_button_name">Force NV21 Portrait</string>
+    <string name="force_hook_all_work_mode_button_name">Hook All Work Mode</string>
+
+    <string name="work_mode_normal">Normal</string>
+    <string name="work_mode_scan_qr_code">Scan QR Code</string>
+    <string name="work_mode_face_recognition">Face Recognition</string>
 </resources>

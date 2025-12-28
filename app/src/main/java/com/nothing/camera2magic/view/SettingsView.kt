@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.ControlCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -80,7 +81,6 @@ fun SettingsView() {
             isChecked = uiState.injectMenuEnabled,
             onClick = { viewModel.onInjectMenuToggled() }
         )
-
         Box(modifier = Modifier.weight(1f))
     }
 }

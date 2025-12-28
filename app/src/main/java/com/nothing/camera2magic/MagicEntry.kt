@@ -162,7 +162,6 @@ class MagicEntry : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         MagicNative.updateVideoSource()
-                        MagicNative.setNativeLogEnabled(MagicNative.enableLog)
                         val activity = param.thisObject as Activity
                         FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
                     }
