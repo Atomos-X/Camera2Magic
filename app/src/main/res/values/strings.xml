@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Camera2 Magic</string>
+    <!-- 权限引导页面的字符串 -->
+    <string name="permission_rationale_title">Media Access Required</string>
+    <string name="permission_rationale_description">To load your selected videos and images for the virtual camera, the app needs permission to access media files on your device.</string>
+    <string name="grant_permission_button_name">Grant Permission</string>
+    <!--spotlight-->
+    <string-array name="media_types">
+        <item>Video</item>
+        <item>rtsp://</item>
+    </string-array>
+    <string name="module_switch_name">Enable Module</string>
+    <!--settings-->
+    <string name="play_sound_button_name">Play Sound</string>
+    <string name="enable_log_button_name">Enable Log</string>
+    <string name="inject_control_button_name">Inject Menu</string>
+    <string name="force_nv21_portrait_button_name">Force NV21 Portrait</string>
+</resources>

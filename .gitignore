@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+.kotlin/
+**/.cache
+app/build/
+app/release/
+local.properties
+*.iml
+**/.cxx
+/app/src/main/cpp/
+!/app/src/main/jniLibs
+.DS_Store
