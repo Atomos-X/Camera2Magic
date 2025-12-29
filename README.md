@@ -4,6 +4,7 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
   
 - hook camera1/2 api  
   - [x] 初步检测目标应用的工作模式(普通，扫码，人脸检测)
+    - [x] HOOK所有工作模式（默认）
   - [x] 选择本地媒体视频解码  
     - [x] 视频解码
       - [x] 双缓冲 (Ping-Pong Mechanism)
@@ -18,8 +19,8 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
   - [x] 生成 `nv21 byte[]`   
     - [x] `camera1 api` 拍照 使用当前 nv21 bytes数据(默认)   
     - [x] 强制将 `nv21 data`转换为`视觉正向`（默认）
-    - [ ] 使用指定图片替换拍照数据 ？ 
-  - [ ] 已知问题：Stride!=Width情况下部分分辨率边缘出现绿线（例如：1080x1920），将在下一次更新修复  
+  - [ ] 使用指定图片替换拍照数据 ？ 
+  - [x] 已修复边缘绿线问题  
   
   
 - 向目标应用注入浮动窗口，用来调试控制(需要开启目标应用的悬浮窗功能)  
@@ -35,8 +36,7 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
     - [x] 模块临时开关  
     - [x] 播放音频开关  
     - [x] 打印日志开关（错误日志依然会打印） 
-    - [x] 注入浮动面板开关  
-    - [x] 强制hook所有工作模式 
+    - [x] 注入浮动面板开关
     
 - 文档  
   - [ ] 详细的文档
@@ -53,6 +53,6 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
   
 **视频**   
   
-测试用机器: oneplus 8T (colorOS port 16.0, [刷机群tg](http://t.me/coloros_port_sm8250))
+测试用机器: oneplus 8T (colorOS port 16.0)
 
 
