@@ -29,6 +29,18 @@ class MagicEntry : IXposedHookLoadPackage {
 
     external fun nativeInit()
     companion object {
+        // load libs
+        init{
+            try {
+                System.loadLibrary("avutil")
+                System.loadLibrary("swresample")
+                System.loadLibrary("avcodec")
+                System.loadLibrary("avformat")
+                System.loadLibrary("camera_magic")
+            } catch (e: UnsatisfiedLinkError) {
+                DOG(TAG, "Error loading native libraries: ${e.message}", MagicNative.enableLog)
+            }
+        }
         private const val TAG = "[MAGIC]"
         private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
         @Volatile
@@ -114,14 +126,12 @@ class MagicEntry : IXposedHookLoadPackage {
                     GlobalHookState.applicationContext = context
                     val magicEntryInstance = MagicEntry()
 
-                    System.loadLibrary("camera_magic")
-
                     magicEntryInstance.nativeInit()
-                    MagicNative.updateVideoSource()
 
-                    magicEntryInstance.hookActivity(lpparam)
+                    magicEntryInstance.hookActivity()
                     magicEntryInstance.hookGLES20(lpparam)
 
+                    MagicNative.updateVideoSource()
                     magicCamera1(lpparam, magicEntryInstance, surfaceTextureCache)
                     magicCamera2(lpparam, magicEntryInstance, surfaceTextureCache)
                     FloatWindowManager.init(context)
@@ -151,7 +161,7 @@ class MagicEntry : IXposedHookLoadPackage {
         }
     }
 
-    private fun hookActivity(lpparam: LoadPackageParam) {
+    private fun hookActivity() {
         try {
             XposedHelpers.findAndHookMethod(
                 Activity::class.java,
