@@ -28,19 +28,9 @@ object GlobalHookState {
 class MagicEntry : IXposedHookLoadPackage {
 
     external fun nativeInit()
+
     companion object {
-        // load libs
-        init{
-            try {
-                System.loadLibrary("avutil")
-                System.loadLibrary("swresample")
-                System.loadLibrary("avcodec")
-                System.loadLibrary("avformat")
-                System.loadLibrary("camera_magic")
-            } catch (e: UnsatisfiedLinkError) {
-                DOG(TAG, "Error loading native libraries: ${e.message}", MagicNative.enableLog)
-            }
-        }
+        //
         private const val TAG = "[MAGIC]"
         private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
         @Volatile
@@ -124,6 +114,9 @@ class MagicEntry : IXposedHookLoadPackage {
 
                     val context = param.thisObject as Application
                     GlobalHookState.applicationContext = context
+
+                    System.loadLibrary("camera_magic")
+
                     val magicEntryInstance = MagicEntry()
 
                     magicEntryInstance.nativeInit()
