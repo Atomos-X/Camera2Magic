@@ -8,6 +8,6 @@ app/release/
 local.properties
 *.iml
 **/.cxx
-/app/src/main/cpp/
+# /app/src/main/cpp/
 !/app/src/main/jniLib
 .DS_Store
