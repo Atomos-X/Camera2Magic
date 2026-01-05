@@ -113,7 +113,6 @@ object MagicNative {
             Log.d("$LOG_PREFIX $tag", message)
         }
     }
-
     fun refreshPrefs() {
         try {
             prefs.reload()

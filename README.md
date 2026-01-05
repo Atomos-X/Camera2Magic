@@ -48,7 +48,7 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
 
 ## 使用教程
 视频文件需要放在本地公共存储目录，大部分拥有相机功能的app都能访问。如： `DCIM`、`MOVIES`等。  
-手机需要`root`并安装`lsposed模块`，在`lsposed manager`中启用模块，勾选作用域(tiktok,telegram,wechat...)，强制关闭该应用，重新打开。   
+手机需要`root`并安装`lsposed模块`，在`lsposed manager`中启用模块，勾选作用域(`tiktok`, `telegram`, `wechat` ...)，强制关闭该应用，重新打开。   
 打开本模块App，选择一个视频文件（根据需要，启用声音等其他功能）。  
 打开被Hook的应用，使用相机功能，应该能看到预览画面被你的视频替换了。  
   
