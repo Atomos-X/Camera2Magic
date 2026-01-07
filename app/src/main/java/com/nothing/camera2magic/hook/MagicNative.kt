@@ -7,22 +7,24 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import com.nothing.camera2magic.GlobalHookState
-import com.nothing.camera2magic.ui.theme.PreviewNV21Helper
+import com.nothing.camera2magic.hook.PreviewNV21Helper
 import de.robv.android.xposed.XSharedPreferences
 
 data class MagicConfig (
     val playSound: Boolean = false,
     val enableLog: Boolean = false,
+    val manuallyRotate: Boolean = false
 )
 
 object MagicNative {
-    private const val LOG_PREFIX = "[Magic]"
+    private const val LOG_PREFIX = "[VCX]"
     private const val TAG = "[NATIVE]"
     private const val KEY_VIDEO_ID = "video_id"
     private const val KEY_MODULE_ENABLED = "module_enabled"
     private const val KEY_PLAY_SOUND = "play_sound"
     private const val KEY_ENABLE_LOG = "enable_log"
-    private const val KEY_INJECT_MENU_ENABLED = "inject_menu"
+    private const val KEY_INJECT_MENU = "inject_menu"
+    private const val KEY_MANUALLY_ROTATE = "manually_rotate"
     private const val PREFS_NAME = "virtual_camera_x_prefs"
     private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
 
@@ -72,7 +74,7 @@ object MagicNative {
         lastFrameHeight = height;
         hasValidFrame = true;
         val buffer = cachedBuffer ?: return
-        val expectedSize = width * height *3 / 2
+        val expectedSize = width * height * 3 / 2
         if (buffer.size < expectedSize) return
 
         PreviewNV21Helper.processFrame(buffer,width,height) { bitmap ->
@@ -107,24 +109,26 @@ object MagicNative {
     external fun resetVideoSource()
     @JvmStatic
     external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
+    @JvmStatic
+    external fun cameraIsClose()
 
     fun logDog(tag: String, message: String, enabled: Boolean) {
         if (enabled) {
             Log.d("$LOG_PREFIX $tag", message)
         }
     }
-
     fun refreshPrefs() {
         try {
             prefs.reload()
             val config = MagicConfig(
                 playSound = prefs.getBoolean(KEY_PLAY_SOUND, false),
                 enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false),
+                manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
             )
             enableLog = config.enableLog
             videoID = prefs.getString(KEY_VIDEO_ID, null)
             moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
-            injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU_ENABLED, false)
+            injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
             updateNativeConfig(config)
         } catch (e: Exception) { /* Do Nothing */ }
     }

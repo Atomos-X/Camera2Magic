@@ -2,7 +2,6 @@ package com.nothing.camera2magic.view
 
 import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -16,8 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.ControlCamera
+import androidx.compose.material.icons.filled.Rotate90DegreesCw
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -81,7 +81,13 @@ fun SettingsView() {
             isChecked = uiState.injectMenuEnabled,
             onClick = { viewModel.onInjectMenuToggled() }
         )
-        Box(modifier = Modifier.weight(1f))
+        SettingsToggleButton(
+            modifier = Modifier.weight(1f),
+            text = stringResource(R.string.manually_rotate_button_name),
+            icon = Icons.Default.Rotate90DegreesCw,
+            isChecked = uiState.manuallyRotateEnabled,
+            onClick = { viewModel.onManuallyRotateToggled() }
+        )
     }
 }
 

@@ -17,8 +17,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
 import java.util.WeakHashMap
 import java.util.Collections
 import com.nothing.camera2magic.hook.MagicNative.logDog as DOG
-import com.nothing.camera2magic.hook.magicCamera1
-import com.nothing.camera2magic.hook.magicCamera2
+import com.nothing.camera2magic.hook.camera1Hook
+import com.nothing.camera2magic.hook.camera2Hook
 
 object GlobalHookState {
     @Volatile
@@ -47,7 +47,6 @@ class MagicEntry : IXposedHookLoadPackage {
             lastCameraId = null
         }
 
-
         private var lastCameraSentAt: Long = 0
         private val CAMERA_PARAM_THROTTLE_MS = 250L
 
@@ -71,10 +70,7 @@ class MagicEntry : IXposedHookLoadPackage {
         val now = System.currentTimeMillis()
         val isExplicitUpdate = overrideWidth > 0
 
-        if (!isExplicitUpdate &&
-            lastCameraId == cameraId &&
-            now - lastCameraSentAt < CAMERA_PARAM_THROTTLE_MS
-        ) {
+        if (!isExplicitUpdate && lastCameraId == cameraId && now - lastCameraSentAt < CAMERA_PARAM_THROTTLE_MS) {
             return
         }
 
@@ -125,8 +121,8 @@ class MagicEntry : IXposedHookLoadPackage {
                     magicEntryInstance.hookGLES20(lpparam)
 
                     MagicNative.updateVideoSource()
-                    magicCamera1(lpparam, magicEntryInstance, surfaceTextureCache)
-                    magicCamera2(lpparam, magicEntryInstance, surfaceTextureCache)
+                    camera1Hook(lpparam, magicEntryInstance, surfaceTextureCache)
+                    camera2Hook(lpparam, magicEntryInstance, surfaceTextureCache)
                     FloatWindowManager.init(context)
                 }
             }
