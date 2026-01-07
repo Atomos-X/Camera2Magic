@@ -19,6 +19,7 @@ class SettingsViewModel(
         private const val KEY_PLAY_SOUND = "play_sound"
         private const val KEY_ENABLE_LOG = "enable_log"
         private const val KEY_INJECT_MENU_ENABLED = "inject_menu"
+        private const val KEY_MANUALLY_ROTATE = "manually_rotate"
     }
 
     init {
@@ -42,12 +43,18 @@ class SettingsViewModel(
         _uiState.update { it.copy(injectMenuEnabled = newState) }
         saveBoolean(KEY_INJECT_MENU_ENABLED, newState)
     }
+    fun onManuallyRotateToggled() {
+        val newState = !_uiState.value.manuallyRotateEnabled
+        _uiState.update { it.copy(manuallyRotateEnabled = newState) }
+        saveBoolean(KEY_MANUALLY_ROTATE, newState)
+    }
 
     private fun loadInitialSettings() {
         _uiState.value = SettingsUiState(
             soundEnabled = prefs?.getBoolean(KEY_PLAY_SOUND, false) ?: false,
             logEnabled = prefs?.getBoolean(KEY_ENABLE_LOG, false) ?: false,
             injectMenuEnabled = prefs?.getBoolean(KEY_INJECT_MENU_ENABLED, false) ?: false,
+            manuallyRotateEnabled = prefs?.getBoolean(KEY_MANUALLY_ROTATE, false) ?: false
         )
     }
 
@@ -60,4 +67,5 @@ data class SettingsUiState(
     val soundEnabled: Boolean = false,
     val logEnabled: Boolean = false,
     val injectMenuEnabled: Boolean = false,
+    val manuallyRotateEnabled: Boolean = false
 )
