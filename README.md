@@ -1,4 +1,17 @@
-Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +  
+Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +   
+
+**请不要用于非法用途**
+
+![img](./DOC/x.jpg)
+
+## 使用教程
+视频文件需要放在本地公共存储目录，大部分拥有相机功能的app都能访问。如： `DCIM`、`MOVIES`等。在使用时授予目标应用读取媒体权限。
+手机需要`root`并安装`lsposed模块`，在`lsposed manager`中启用模块，勾选作用域(`tiktok`, `telegram`, `wechat` ...)，强制关闭该应用，重新打开。   
+打开本模块App，选择一个视频文件（根据需要，启用声音等其他功能）。  
+打开被Hook的应用，使用相机功能，应该能看到预览画面被你的视频替换了。
+
+测试用机器: oneplus 8T lpddr4 (colorOS port 16.0)  
+
   
 ## 进度  
   
@@ -42,19 +55,6 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
     
 - 文档  
   - [ ] 详细的文档
-    
-    
-**请不要用于非法用途**  
 
-## 使用教程
-视频文件需要放在本地公共存储目录，大部分拥有相机功能的app都能访问。如： `DCIM`、`MOVIES`等。  
-手机需要`root`并安装`lsposed模块`，在`lsposed manager`中启用模块，勾选作用域(`tiktok`, `telegram`, `wechat` ...)，强制关闭该应用，重新打开。   
-打开本模块App，选择一个视频文件（根据需要，启用声音等其他功能）。  
-打开被Hook的应用，使用相机功能，应该能看到预览画面被你的视频替换了。  
-  
-  
-**视频**   
-  
-测试用机器: oneplus 8T (colorOS port 16.0)
 
 
