@@ -1,13 +1,16 @@
+@file:Suppress("DEPRECATION")
+
 package com.nothing.camera2magic.hook
 
 import android.content.ContentUris
 import android.database.Cursor
 import android.hardware.Camera
 import android.provider.MediaStore
-import android.util.Log
 import android.view.Surface
 import com.nothing.camera2magic.GlobalHookState
-import com.nothing.camera2magic.hook.PreviewNV21Helper
+import com.nothing.camera2magic.utils.Dog
+import com.nothing.camera2magic.utils.FloatWindowManager
+import com.nothing.camera2magic.utils.PreviewNV21Helper
 import de.robv.android.xposed.XSharedPreferences
 
 data class MagicConfig (
@@ -70,9 +73,9 @@ object MagicNative {
 
     @JvmStatic
     fun onFrameDataUpdated(width: Int, height: Int) {
-        lastFrameWidth = width;
-        lastFrameHeight = height;
-        hasValidFrame = true;
+        lastFrameWidth = width
+        lastFrameHeight = height
+        hasValidFrame = true
         val buffer = cachedBuffer ?: return
         val expectedSize = width * height * 3 / 2
         if (buffer.size < expectedSize) return
@@ -86,10 +89,10 @@ object MagicNative {
                 camera1Callback?.onPreviewFrame(buffer, currentCamera1)
             }
         } catch (e: Exception) {
-            logDog("VCX", "Error in Camera1 callback: ${e.message}", enableLog)
+            Dog.i("VCX", "Error in Camera1 callback: ${e.message}", enableLog)
         }
         // 分发给 camera2
-        previewCallback?.invoke(buffer, width, height);
+        previewCallback?.invoke(buffer, width, height)
     }
     @JvmStatic
     external fun getApiLevel(apiLevel: Int)
@@ -110,13 +113,10 @@ object MagicNative {
     @JvmStatic
     external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
     @JvmStatic
-    external fun cameraIsClose()
+    external fun needStopRenderer()
+    @JvmStatic
+    external fun needStartRenderer()
 
-    fun logDog(tag: String, message: String, enabled: Boolean) {
-        if (enabled) {
-            Log.d("$LOG_PREFIX $tag", message)
-        }
-    }
     fun refreshPrefs() {
         try {
             prefs.reload()
@@ -167,7 +167,7 @@ object MagicNative {
                 }
             }
         } catch (e: Exception) {
-            logDog(TAG, "Error updating video source: ${e.message}", enableLog)
+            Dog.e(TAG, "Error updating video source: ${e.message}", null, enableLog)
             isUriValid = false
         }
 

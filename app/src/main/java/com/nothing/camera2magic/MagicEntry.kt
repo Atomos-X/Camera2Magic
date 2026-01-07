@@ -7,7 +7,7 @@ import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.view.Surface
-import com.nothing.camera2magic.hook.FloatWindowManager
+import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.hook.MagicNative
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -16,7 +16,7 @@ import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
 import java.util.WeakHashMap
 import java.util.Collections
-import com.nothing.camera2magic.hook.MagicNative.logDog as DOG
+import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.hook.camera1Hook
 import com.nothing.camera2magic.hook.camera2Hook
 
@@ -48,7 +48,7 @@ class MagicEntry : IXposedHookLoadPackage {
         }
 
         private var lastCameraSentAt: Long = 0
-        private val CAMERA_PARAM_THROTTLE_MS = 250L
+        private const val CAMERA_PARAM_THROTTLE_MS = 250L
 
         // 缓存 SurfaceTexture -> Surface 的映射
         private val surfaceTextureCache: MutableMap<SurfaceTexture, Surface> =
@@ -81,19 +81,11 @@ class MagicEntry : IXposedHookLoadPackage {
         try {
             val cameraManager = context.getSystemService(CameraManager::class.java)
             val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-            val sensorOrientation =
-                characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-            var pictureWidth = overrideWidth
-            var pictureHeight = overrideHeight
+            val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+            MagicNative.updateCameraParameters(cameraId, sensorOrientation, overrideWidth, overrideHeight)
 
-            MagicNative.updateCameraParameters(
-                cameraId,
-                sensorOrientation,
-                pictureWidth,
-                pictureHeight
-            )
         } catch (e: Exception) {
-            DOG(TAG, "Error getting camera characteristics: ${e.message}", MagicNative.enableLog)
+            Dog.e(TAG, "Error getting camera characteristics: ${e.message}", null, MagicNative.enableLog)
         }
     }
 
@@ -146,7 +138,7 @@ class MagicEntry : IXposedHookLoadPackage {
                     }
                 })
         } catch (t: Throwable) {
-            DOG(TAG, "Couldn't hook GLES20: ${t.message}", MagicNative.enableLog)
+            Dog.e(TAG, "Couldn't hook GLES20:", t, MagicNative.enableLog)
         }
     }
 
@@ -163,7 +155,7 @@ class MagicEntry : IXposedHookLoadPackage {
                     }
                 })
         } catch (t: Throwable) {
-            DOG(TAG, "Couldn't hook Activity.onResume: ${t.message}", MagicNative.enableLog)
+            Dog.e(TAG, "Couldn't hook Activity.onResume: ", t, MagicNative.enableLog)
         }
     }
 }
