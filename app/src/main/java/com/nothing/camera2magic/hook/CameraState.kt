@@ -3,13 +3,13 @@ package com.nothing.camera2magic.hook
 import android.view.Surface
 
 data class CameraState(
+    var apiLevel: Int = 0,
     // camera state
-    var cameraId: String = "-1",
+    var cameraId: String = "0",
     var sensorOrientation: Int = 0,
-    var pictureWidth: Int = 1080,
-    var pictureHeight: Int = 1920,
-
+    var pictureWidth: Int = 1920,
+    var pictureHeight: Int = 1080,
     // preview surface state
-    var surface: Surface? = null,
-    var displayOrientation: Int = 0
+    var displayOrientation: Int = 0,
+    var surface: Surface? = null
 )

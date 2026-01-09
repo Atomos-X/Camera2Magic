@@ -12,15 +12,9 @@ import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.utils.PreviewNV21Helper
 import de.robv.android.xposed.XSharedPreferences
-
-data class MagicConfig (
-    val playSound: Boolean = false,
-    val enableLog: Boolean = false,
-    val manuallyRotate: Boolean = false
-)
+import java.lang.ref.WeakReference
 
 object MagicNative {
-    private const val LOG_PREFIX = "[VCX]"
     private const val TAG = "[NATIVE]"
     private const val KEY_VIDEO_ID = "video_id"
     private const val KEY_MODULE_ENABLED = "module_enabled"
@@ -47,16 +41,27 @@ object MagicNative {
     var moduleEnabled: Boolean = true
         private set
     @Volatile
+    var playSound: Boolean = false
+        private set
+    @Volatile
     var enableLog: Boolean = false
         private set
     @Volatile
     var injectMenuEnabled: Boolean = false
         private set
     @Volatile
+    var manuallyRotate: Boolean = false
+        private set
+
+    @Volatile
     var videoSourceIsReady: Boolean = false
         private set
     @Volatile
     var hasValidFrame = false
+
+    @Volatile
+    private var lastRegisteredSurface: WeakReference<Surface>? = null
+    private val surfaceLock = Any()
 
     @JvmStatic
     fun ensureBuffer(size: Int) {
@@ -70,7 +75,6 @@ object MagicNative {
     fun getCachedBuffer(): ByteArray? {
         return cachedBuffer
     }
-
     @JvmStatic
     fun onFrameDataUpdated(width: Int, height: Int) {
         lastFrameWidth = width
@@ -95,19 +99,13 @@ object MagicNative {
         previewCallback?.invoke(buffer, width, height)
     }
     @JvmStatic
-    external fun getApiLevel(apiLevel: Int)
+    external fun updateNativeConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
-    external fun updateNativeConfig(config: MagicConfig)
-    @JvmStatic
-    external fun updateCameraParameters(cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int)
+    external fun registerSurface(apiLevel: Int, cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int, displayOrientation: Int, surface: Surface)
     @JvmStatic
     external fun setDisplayOrientation(orientation: Int)
     @JvmStatic
-    external fun registerSurface(surface: Surface, displayOrientation: Int)
-    @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray
-    @JvmStatic
-    external fun updateExternalMatrix(matrix: FloatArray)
     @JvmStatic
     external fun resetVideoSource()
     @JvmStatic
@@ -121,24 +119,37 @@ object MagicNative {
         return moduleEnabled && videoSourceIsReady
     }
 
+    fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
+        synchronized(surfaceLock) {
+            val lastSurface = lastRegisteredSurface?.get()
+            if (forceRefresh || lastSurface == null || lastSurface != state.surface) {
+                registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight, state.displayOrientation, state.surface!!)
+                lastRegisteredSurface = WeakReference(state.surface)
+            }
+        }
+    }
+
+    fun releaseLastRegisteredSurface() {
+        synchronized(surfaceLock) {
+            lastRegisteredSurface = null
+        }
+    }
+
     fun refreshPrefs() {
         try {
             prefs.reload()
-            val config = MagicConfig(
-                playSound = prefs.getBoolean(KEY_PLAY_SOUND, false),
-                enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false),
-                manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
-            )
-            enableLog = config.enableLog
             videoID = prefs.getString(KEY_VIDEO_ID, null)
             moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
+            playSound = prefs.getBoolean(KEY_PLAY_SOUND, false)
+            enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false)
             injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
-            updateNativeConfig(config)
+            manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
+            updateNativeConfig(playSound, enableLog, manuallyRotate)
         } catch (e: Exception) { /* Do Nothing */ }
     }
 
     fun updateVideoSource() {
-        val context = GlobalHookState.applicationContext ?: return
+        val context = GlobalHookState.context ?: return
 
         val oldVideoId = videoID
         refreshPrefs()

@@ -3,27 +3,19 @@ package com.nothing.camera2magic
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.graphics.SurfaceTexture
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
-import android.view.Surface
-import androidx.compose.foundation.gestures.Orientation
 import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.hook.MagicNative
+import com.nothing.camera2magic.hook.MagicNative.updateVideoSource
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
-import java.util.WeakHashMap
-import java.util.Collections
-import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.hook.camera1Hook
 import com.nothing.camera2magic.hook.camera2Hook
 
 object GlobalHookState {
     @Volatile
-    var applicationContext: Context? = null
+    var context: Context? = null
 }
 
 class MagicEntry : IXposedHookLoadPackage {
@@ -31,132 +23,40 @@ class MagicEntry : IXposedHookLoadPackage {
     external fun nativeInit()
 
     companion object {
-        //
         private const val TAG = "[MAGIC]"
         private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
-        @Volatile
-        var lastRegisteredSurface: Surface? = null
-        val surfaceLock = Any()
 
-        @get:JvmStatic
-        @Volatile
-        var lastCameraId: String? = null
-            private set
-
-        @JvmStatic
-        fun resetLastCameraId() {
-            lastCameraId = null
+        init {
+            System.loadLibrary("camera_magic")
         }
 
-        private var lastCameraSentAt: Long = 0
-        private const val CAMERA_PARAM_THROTTLE_MS = 250L
-
-        // 缓存 SurfaceTexture -> Surface 的映射
-        private val surfaceTextureCache: MutableMap<SurfaceTexture, Surface> =
-            Collections.synchronizedMap(WeakHashMap())
     }
-
-    fun registerSurfaceIfNew(surface: Surface, displayOrientation: Int, forceRefresh: Boolean = false) {
-        synchronized(surfaceLock) {
-            // 如果是新的 Surface 或者被指定强制刷新，就传递给 Native
-            if (forceRefresh || lastRegisteredSurface != surface) {
-                MagicNative.registerSurface(surface, displayOrientation)
-                lastRegisteredSurface = surface
-            }
-        }
-    }
-
-    fun logAndSendCameraParameters(cameraId: String, overrideWidth: Int = 0, overrideHeight: Int = 0) {
-
-        val now = System.currentTimeMillis()
-        val isExplicitUpdate = overrideWidth > 0
-
-        if (!isExplicitUpdate && lastCameraId == cameraId && now - lastCameraSentAt < CAMERA_PARAM_THROTTLE_MS) {
-            return
-        }
-
-        lastCameraId = cameraId
-        lastCameraSentAt = now
-
-        val context = GlobalHookState.applicationContext ?: return
-        try {
-            val cameraManager = context.getSystemService(CameraManager::class.java)
-            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-            val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
-            MagicNative.updateCameraParameters(cameraId, sensorOrientation, overrideWidth, overrideHeight)
-
-        } catch (e: Exception) {
-            Dog.e(TAG, "Error getting camera characteristics: ${e.message}", null, MagicNative.enableLog)
-        }
-    }
-
 
     override fun handleLoadPackage(lpparam: LoadPackageParam) {
 
         if (lpparam.packageName == MODULE_PACKAGE_NAME) return
-
-        XposedHelpers.findAndHookMethod(
-            Application::class.java,
-            "onCreate",
-            object : XC_MethodHook() {
+        XposedHelpers.findAndHookMethod(Application::class.java, "onCreate", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-
                     val context = param.thisObject as Application
-                    GlobalHookState.applicationContext = context
-
-                    System.loadLibrary("camera_magic")
+                    GlobalHookState.context = context
 
                     val magicEntryInstance = MagicEntry()
-
                     magicEntryInstance.nativeInit()
-
                     magicEntryInstance.hookActivity()
-                    magicEntryInstance.hookGLES20(lpparam)
-
-                    MagicNative.updateVideoSource()
-                    camera1Hook(lpparam, magicEntryInstance, surfaceTextureCache)
-                    camera2Hook(lpparam, magicEntryInstance, surfaceTextureCache)
+                    camera1Hook(lpparam)
+                    camera2Hook(lpparam)
                     FloatWindowManager.init(context)
                 }
-            }
-        )
-    }
-
-    private fun hookGLES20(lpparam: LoadPackageParam) {
-        try {
-            val gles20Class = XposedHelpers.findClass("android.opengl.GLES20", lpparam.classLoader)
-
-            XposedBridge.hookAllMethods(
-                gles20Class,
-                "glUniformMatrix4fv",
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (param.args.size != 5 || param.args[3] !is FloatArray) {
-                            return
-                        }
-                        val matrix = param.args[3] as FloatArray
-                        MagicNative.updateExternalMatrix(matrix)
-                    }
-                })
-        } catch (t: Throwable) {
-            Dog.e(TAG, "Couldn't hook GLES20:", t, MagicNative.enableLog)
-        }
+            })
     }
 
     private fun hookActivity() {
-        try {
-            XposedHelpers.findAndHookMethod(
-                Activity::class.java,
-                "onResume",
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        MagicNative.updateVideoSource()
-                        val activity = param.thisObject as Activity
-                        FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
-                    }
-                })
-        } catch (t: Throwable) {
-            Dog.e(TAG, "Couldn't hook Activity.onResume: ", t, MagicNative.enableLog)
-        }
+        XposedHelpers.findAndHookMethod(Activity::class.java, "onResume", object : XC_MethodHook() {
+            override fun afterHookedMethod(param: MethodHookParam) {
+                updateVideoSource()
+                val activity = param.thisObject as Activity
+                FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
+            }
+        })
     }
 }
