@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Camera2 Magic</string>
+    <string name="permission_rationale_title">需要媒体权限</string>
+    <string name="permission_rationale_description">为了加载您的视频和图片作为虚拟摄像头内容，应用需要访问您设备上的媒体文件。</string>
+    <string name="grant_permission_button_name">授予权限</string>
+    <string name="module_switch_name">开启模块</string>
+    <string name="play_sound_button_name">播放声音</string>
+    <string name="enable_log_button_name">打印日志</string>
+    <string name="inject_control_button_name">浮动控制台</string>
+    <string name="manually_rotate_button_name">旋转画面</string>
+    <string name="work_mode_normal">拍照</string>
+    <string name="work_mode_scan_qr_code">扫描二维码</string>
+    <string name="work_mode_face_recognition">人脸识别</string>
+</resources>

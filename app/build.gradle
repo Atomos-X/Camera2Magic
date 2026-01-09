@@ -1,0 +1,109 @@
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+
+def gitCommitHash = 'git rev-parse --short HEAD'.execute().text.trim()
+
+def getVersionCodeFromGit() {
+    def baseCode = 57125
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            standardOutput = stdout
+        }
+        def gitCommitCount = Integer.parseInt(stdout.toString().trim())
+        return baseCode+gitCommitCount
+    } catch (Exception e) {
+        e.printStackTrace()
+        // 如果无法获取 git 提交次数（例如在非 git 环境下），则使用一个默认值
+        return ++baseCode
+    }
+}
+
+android {
+    namespace 'com.nothing.camera2magic'
+    compileSdk {
+        version = release(36)
+    }
+//    ndkVersion = "27.0.12077973"
+
+    defaultConfig {
+        applicationId "com.nothing.camera2magic"
+        minSdk 29
+        targetSdk 36
+        versionCode getVersionCodeFromGit()
+        versionName "0.6." + gitCommitHash
+
+//        externalNativeBuild {
+//            cmake {
+//                cppFlags += ""
+//                arguments "-DANDROID_PLATFORM=android-29"
+//            }
+//        }
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            applicationVariants.all { variant ->
+                if (variant.buildType.name == "release") {
+                    variant.outputs.each { output ->
+                        def fileName = "CAM2Magic-${defaultConfig.versionName}.apk"
+                        output.outputFileName = fileName
+                    }
+                }
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+
+//    externalNativeBuild {
+//        cmake {
+//            path file("src/main/cpp/CMakeLists.txt")
+//            version = "3.22.1"
+//        }
+//    }
+
+    buildFeatures {
+        compose true
+    }
+}
+
+dependencies {
+    implementation libs.androidx.compose.foundation
+    implementation libs.androidx.compose.adaptive
+    implementation libs.androidx.material3
+    compileOnly 'de.robv.android.xposed:api:82'
+    implementation "androidx.compose.material:material-icons-extended-android:1.7.8"
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation "com.google.accompanist:accompanist-permissions:0.37.3"
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.lifecycle.runtime.ktx
+    implementation libs.androidx.activity.compose
+    implementation platform(libs.androidx.compose.bom)
+    implementation libs.androidx.compose.ui
+    implementation libs.androidx.compose.ui.graphics
+    implementation libs.androidx.compose.ui.tooling.preview
+    implementation libs.androidx.compose.material3
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.espresso.core
+    androidTestImplementation platform(libs.androidx.compose.bom)
+    androidTestImplementation libs.androidx.compose.ui.test.junit4
+    debugImplementation libs.androidx.compose.ui.tooling
+    debugImplementation libs.androidx.compose.ui.test.manifest
+}
