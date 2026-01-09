@@ -11,6 +11,7 @@ import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalHookState
 import com.nothing.camera2magic.hook.MagicNative.needStartRenderer
+import com.nothing.camera2magic.hook.MagicNative.needStopRenderer
 import com.nothing.camera2magic.hook.MagicNative.registerSurfaceIfNew
 import com.nothing.camera2magic.hook.MagicNative.releaseLastRegisteredSurface
 import com.nothing.camera2magic.utils.Dog
@@ -110,8 +111,9 @@ fun camera2Hook(lpparam: LoadPackageParam) {
             if (!MagicNative.isReadyForHook()) return
 
             val camera = param.thisObject as CameraDevice
-            val state = getCameraState(camera)
+            activeCameraRef = WeakReference(camera)
 
+            val state = getCameraState(camera)
             state.apiLevel = 2
             state.cameraId = camera.id
 
@@ -142,7 +144,7 @@ fun camera2Hook(lpparam: LoadPackageParam) {
             val activeCamera = activeCameraRef?.get()
 
             if (activeCamera != null && closingCamera === activeCamera) {
-                MagicNative.needStopRenderer()
+                needStopRenderer()
                 releaseLastRegisteredSurface()
                 activeCameraRef = null
             }
