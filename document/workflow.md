@@ -46,7 +46,7 @@
         V4 --> V5[Texture Copier Shader]
         V5 --> V6[RGBA Texture]
     
-        V6 --> V7[Apply Video Rotation Matrix<br/>(sensor / display / metadata)]
+        V6 --> V7[Apply Video Rotation Matrix<br/> sensor / display / metadata]
     ```
 4. 视频双缓冲，GPU异步`NV21`转码    
     ```mermaid
