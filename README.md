@@ -2,10 +2,10 @@ Camera2 Magic：一个虚拟摄像头软件？支持 android 10 +
 
 **请不要用于非法用途**
 
-![img](./DOC/x.jpg)
+![img](document/x.jpg)
 
 ## workflow
-![workflow](./DOC/workflow.md)
+![workflow](document/workflow.md)
 
 ## 使用教程
 视频文件需要放在本地公共存储目录，如： `DCIM`、`MOVIES`等；在使用时授予目标应用读取媒体权限。  
