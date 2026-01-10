@@ -52,7 +52,6 @@ object MagicNative {
     @Volatile
     var manuallyRotate: Boolean = false
         private set
-
     @Volatile
     var videoSourceIsReady: Boolean = false
         private set
@@ -122,9 +121,11 @@ object MagicNative {
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
-            if (forceRefresh || lastSurface == null || lastSurface != state.surface) {
-                registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight, state.displayOrientation, state.surface!!)
-                lastRegisteredSurface = WeakReference(state.surface)
+            state.surface?.let {
+                if (forceRefresh || it != lastSurface) {
+                    registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight, state.displayOrientation, it)
+                    lastRegisteredSurface = WeakReference(it)
+                }
             }
         }
     }
