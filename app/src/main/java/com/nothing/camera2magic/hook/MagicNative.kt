@@ -100,7 +100,8 @@ object MagicNative {
     @JvmStatic
     external fun updateNativeConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
-    external fun registerSurface(apiLevel: Int, cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int, displayOrientation: Int, surface: Surface)
+    external fun registerSurface(apiLevel: Int, cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
+                                 packageName: String, displayOrientation: Int, previewWidth: Int, previewHeight: Int, surface: Surface)
     @JvmStatic
     external fun setDisplayOrientation(orientation: Int)
     @JvmStatic
@@ -123,7 +124,8 @@ object MagicNative {
             val lastSurface = lastRegisteredSurface?.get()
             state.surface?.let {
                 if (forceRefresh || it != lastSurface) {
-                    registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight, state.displayOrientation, it)
+                    registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight,
+                        state.packageName, state.displayOrientation, state.previewWidth, state.previewHeight,it)
                     lastRegisteredSurface = WeakReference(it)
                 }
             }
@@ -150,7 +152,7 @@ object MagicNative {
     }
 
     fun updateVideoSource() {
-        val context = GlobalHookState.context ?: return
+        val context = GlobalHookState.appContext ?: return
 
         val oldVideoId = videoID
         refreshPrefs()

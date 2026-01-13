@@ -104,6 +104,7 @@ private fun getTargetFrom(surfaces: List<Surface>): Surface? {
 }
 
 fun camera2Hook(lpparam: LoadPackageParam) {
+    val pkg = lpparam.packageName
     val classLoader = lpparam.classLoader
 
     val sessionHook = object : XC_MethodHook() {
@@ -116,8 +117,9 @@ fun camera2Hook(lpparam: LoadPackageParam) {
             val state = getCameraState(camera)
             state.apiLevel = 2
             state.cameraId = camera.id
+            state.packageName = pkg
 
-            val context = GlobalHookState.context
+            val context = GlobalHookState.appContext
             if (context != null) {
                 state.displayOrientation = getDisplayOrientation(context)
                 state.sensorOrientation = getSensorOrientation(context, camera.id)

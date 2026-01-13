@@ -1,5 +1,6 @@
 package com.nothing.camera2magic
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
@@ -15,7 +16,7 @@ import com.nothing.camera2magic.hook.camera2Hook
 
 object GlobalHookState {
     @Volatile
-    var context: Context? = null
+    var appContext: Context? = null
 }
 
 class MagicEntry : IXposedHookLoadPackage {
@@ -27,6 +28,7 @@ class MagicEntry : IXposedHookLoadPackage {
         private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
 
         init {
+            // System.loadLibrary("shadowhook")
             System.loadLibrary("camera_magic")
         }
 
@@ -38,8 +40,7 @@ class MagicEntry : IXposedHookLoadPackage {
         XposedHelpers.findAndHookMethod(Application::class.java, "onCreate", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val context = param.thisObject as Application
-                    GlobalHookState.context = context
-
+                    GlobalHookState.appContext = context
                     val magicEntryInstance = MagicEntry()
                     magicEntryInstance.nativeInit()
                     magicEntryInstance.hookActivity()

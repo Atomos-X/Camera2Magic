@@ -24,6 +24,9 @@ import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
 private const val TAG = "[CAM1]"
+
+// dirty fix
+private const val BILIBILI = "tv.danmaku.bili"
 private var activeCameraRef: WeakReference<Any>? = null
 private var cameraState = WeakHashMap<Camera, CameraState>()
 private val surfaceCache = WeakHashMap<Camera, Any>()
@@ -48,6 +51,8 @@ private fun getSurfaceFrom(obj: Any?): Surface? {
 
 fun camera1Hook(lpparam: LoadPackageParam) {
 
+    val pkg = lpparam.packageName
+
     val cameraClass = XposedHelpers.findClass("android.hardware.Camera", lpparam.classLoader)
 
     XposedHelpers.findAndHookMethod(cameraClass, "open", Int::class.javaPrimitiveType, object : XC_MethodHook() {
@@ -57,6 +62,7 @@ fun camera1Hook(lpparam: LoadPackageParam) {
             val state = getCameraState(camera)
             state.apiLevel = 1
             state.cameraId = (param.args[0] as Int).toString()
+            state.packageName = pkg
         }
     })
 
@@ -67,29 +73,48 @@ fun camera1Hook(lpparam: LoadPackageParam) {
 
             val params = param.args[0] as Camera.Parameters
             val pictureSize = params.pictureSize
+            val previewSize = params.previewSize
+
             val state = getCameraState(cameraObject)
 
-            if(state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
+            if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
                 state.pictureWidth = pictureSize.width
                 state.pictureHeight = pictureSize.height
             }
+            if (state.previewWidth != previewSize.width || state.previewHeight != previewSize.height) {
+                state.previewWidth = previewSize.width
+                state.previewHeight = previewSize.height
+            }
         }
     })
+
 
     XposedHelpers.findAndHookMethod(cameraClass, "setPreviewTexture", SurfaceTexture::class.java, object : XC_MethodHook() {
         override fun beforeHookedMethod(param: MethodHookParam) {
             if (!MagicNative.isReadyForHook()) return
             val camera = param.thisObject as Camera
+            val state = getCameraState(camera)
             val st = param.args[0] as SurfaceTexture
+            /**
+             * @brief 对于 bilibili 的特殊处理
+             * SurfaceTexture bufferSize = (1,1) -> ANativeWindow bufferSize
+             * dirty fix: SurfaceTexture bufferSize = (1920,1080) -> ANativeWindow bufferSize
+             */
+            if (pkg == BILIBILI) {
+                st.setDefaultBufferSize(state.previewWidth, state.previewHeight)
+
+            }
             surfaceCache[camera] = st
         }
     })
+
     XposedHelpers.findAndHookMethod(cameraClass, "setPreviewDisplay", SurfaceHolder::class.java, object : XC_MethodHook() {
         override fun beforeHookedMethod(param: MethodHookParam) {
             if (!MagicNative.isReadyForHook()) return
             val camera = param.thisObject as Camera
             val holder = param.args[0] as SurfaceHolder
             surfaceCache[camera] = holder.surface
+            val state = getCameraState(camera)
         }
     })
 
