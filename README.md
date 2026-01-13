@@ -56,6 +56,7 @@
  
  
 ### **已知问题**
+  - [ ] 某些应用例如bilibili：Camera1 → SurfaceTexture → GL → Native, ANativeWindow always 1x1，已临时修复拍照hook, 但存在视频旋转问题（需要拍摄竖版的视频：必须将1080x1920视频物理像素横向躺倒）       
   - [x] 视频边缘绿线。已修复      
   - [x] camera1 api 在拍照和录制视频后未能正确停止解码播放等线程。 已修复    
   - [x] camera2 api 部分应用在某些菜单中切换(`tiktok: POST<->TEMPLATES`)，未能正确hook相机的close信号，导致无法预期的停止启动解码线程。 已修复    
