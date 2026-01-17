@@ -12,12 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Message
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ControlCamera
-import androidx.compose.material.icons.filled.Rotate90DegreesCw
-import androidx.compose.material.icons.filled.ScreenRotation
+
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -37,6 +32,7 @@ import com.nothing.camera2magic.viewmodel.LocalPrefs
 import com.nothing.camera2magic.viewmodel.SettingsViewModel
 import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import com.nothing.camera2magic.R
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -59,7 +55,7 @@ fun SettingsView() {
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.play_sound_button_name),
-            icon = Icons.AutoMirrored.Filled.VolumeUp,
+            icon = ImageVector.vectorResource(R.drawable.volume_up_24px),
             isChecked = uiState.soundEnabled,
             onClick = { viewModel.onPlaySoundToggled() }
         )
@@ -68,7 +64,7 @@ fun SettingsView() {
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.enable_log_button_name),
-            icon = Icons.AutoMirrored.Filled.Message,
+            icon = ImageVector.vectorResource(R.drawable.breaking_news_24px),
             isChecked = uiState.logEnabled,
             onClick = { viewModel.onEnableLogToggled() }
         )
@@ -77,14 +73,14 @@ fun SettingsView() {
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.inject_control_button_name),
-            icon = Icons.Default.ControlCamera,
+            icon = ImageVector.vectorResource(R.drawable.control_camera_24px),
             isChecked = uiState.injectMenuEnabled,
             onClick = { viewModel.onInjectMenuToggled() }
         )
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.manually_rotate_button_name),
-            icon = Icons.Default.Rotate90DegreesCw,
+            icon = ImageVector.vectorResource(R.drawable.rotate_90_degrees_cw_24px),
             isChecked = uiState.manuallyRotateEnabled,
             onClick = { viewModel.onManuallyRotateToggled() }
         )

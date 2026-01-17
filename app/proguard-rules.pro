@@ -19,3 +19,13 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# 1. 保护所有 native 方法不被重命名或删除
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# 假设你的包名是 com.nothing.camera2magic
+-keep class com.nothing.camera2magic.** {
+    *;
+}
