@@ -1,10 +1,7 @@
 @file:Suppress("DEPRECATION")
 package com.nothing.camera2magic.hook
 
-import android.graphics.ImageFormat
-import android.graphics.Rect
 import android.graphics.SurfaceTexture
-import android.graphics.YuvImage
 import android.hardware.Camera
 import android.os.Handler
 import android.os.Looper
@@ -19,7 +16,6 @@ import com.nothing.camera2magic.utils.Dog
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
-import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
@@ -52,7 +48,6 @@ private fun getSurfaceFrom(obj: Any?): Surface? {
 fun camera1Hook(lpparam: LoadPackageParam) {
 
     val pkg = lpparam.packageName
-
     val cameraClass = XposedHelpers.findClass("android.hardware.Camera", lpparam.classLoader)
 
     XposedHelpers.findAndHookMethod(cameraClass, "open", Int::class.javaPrimitiveType, object : XC_MethodHook() {
@@ -69,14 +64,11 @@ fun camera1Hook(lpparam: LoadPackageParam) {
     XposedHelpers.findAndHookMethod(cameraClass, "setParameters", Camera.Parameters::class.java, object : XC_MethodHook() {
         override fun afterHookedMethod(param: MethodHookParam) {
             if (!MagicNative.isReadyForHook()) return
-            val cameraObject = param.thisObject as Camera
-
+            val camera = param.thisObject as Camera
             val params = param.args[0] as Camera.Parameters
             val pictureSize = params.pictureSize
             val previewSize = params.previewSize
-
-            val state = getCameraState(cameraObject)
-
+            val state = getCameraState(camera)
             if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
                 state.pictureWidth = pictureSize.width
                 state.pictureHeight = pictureSize.height
@@ -93,18 +85,15 @@ fun camera1Hook(lpparam: LoadPackageParam) {
         override fun beforeHookedMethod(param: MethodHookParam) {
             if (!MagicNative.isReadyForHook()) return
             val camera = param.thisObject as Camera
-            val state = getCameraState(camera)
             val st = param.args[0] as SurfaceTexture
+            surfaceCache[camera] = st
             /**
              * @brief 对于 bilibili 的特殊处理
              * SurfaceTexture bufferSize = (1,1) -> ANativeWindow bufferSize
              * dirty fix: SurfaceTexture bufferSize = (1920,1080) -> ANativeWindow bufferSize
              */
-            if (pkg == BILIBILI) {
-                st.setDefaultBufferSize(state.previewWidth, state.previewHeight)
-
-            }
-            surfaceCache[camera] = st
+            val state = getCameraState(camera)
+            if (pkg == BILIBILI) st.setDefaultBufferSize(state.previewWidth, state.previewHeight)
         }
     })
 
@@ -114,7 +103,6 @@ fun camera1Hook(lpparam: LoadPackageParam) {
             val camera = param.thisObject as Camera
             val holder = param.args[0] as SurfaceHolder
             surfaceCache[camera] = holder.surface
-            val state = getCameraState(camera)
         }
     })
 
@@ -124,7 +112,7 @@ fun camera1Hook(lpparam: LoadPackageParam) {
             val camera = param.thisObject as Camera
             val state = getCameraState(camera)
             val ori = param.args[0] as Int
-            if (state.displayOrientation == ori) return;
+            if (state.displayOrientation == ori) return
             state.displayOrientation = ori
             if (isPreviewing(camera)) setDisplayOrientation(ori)
         }
@@ -202,7 +190,6 @@ fun camera1Hook(lpparam: LoadPackageParam) {
         }
     })
 
-    // a test of takePicture, will be rewritten
     XposedHelpers.findAndHookMethod(cameraClass, "takePicture",
         Camera.ShutterCallback::class.java,
         Camera.PictureCallback::class.java,
@@ -212,42 +199,18 @@ fun camera1Hook(lpparam: LoadPackageParam) {
             override fun beforeHookedMethod(param: MethodHookParam) {
                 if (!MagicNative.isReadyForHook()) return
                 param.result = null
-
+                val camera = param.thisObject as Camera
                 val jpegCallback = param.args[3] as? Camera.PictureCallback
-                val cameraObj = param.thisObject as? Camera
 
                 if (jpegCallback != null) {
                     Thread {
-                        // 简单的重试机制：如果正好赶上 Buffer 初始化（无效），稍微等一下
-                        var snapshot: Triple<ByteArray, Int, Int>? = null
-                        for (i in 0..5) {
-                            snapshot = MagicNative.getFrameSnapshot()
-                            if (snapshot != null) break
-                            Thread.sleep(30)
-                        }
-
-                        val jpegData = if (snapshot != null) {
-                            val (buffer, w, h) = snapshot
-                            try {
-                                val yuvImage = YuvImage(buffer, ImageFormat.NV21, w, h, null)
-                                val outStream = ByteArrayOutputStream()
-                                yuvImage.compressToJpeg(Rect(0, 0, w, h), 90, outStream)
-                                outStream.toByteArray()
-                            } catch (e: Exception) {
-                                Dog.e(TAG, "Compress failed: ${e.message}", null, MagicNative.enableLog)
-                                ByteArray(0)
-                            }
-                        } else {
-                            Dog.i(TAG, "Capture failed: Buffer invalid/empty after retries", MagicNative.enableLog)
-                            ByteArray(0)
-                        }
-
-                        // 回主线程回调
-                        Handler(Looper.getMainLooper()).post {
-                            try {
-                                jpegCallback.onPictureTaken(jpegData, cameraObj)
-                            } catch (e: Exception) {
-                                Dog.e(TAG, "Callback failed: ${e.message}", null, MagicNative.enableLog)
+                        val snapshot = MagicNative.getFrameSnapshot()
+                        if (snapshot != null) {
+                            val (data, w, h) = snapshot
+                            val jpegData = MagicNative.nv21ToJpegByteArray(data, w, h) ?: return@Thread
+                            // 回主线程回调
+                            Handler(Looper.getMainLooper()).post {
+                                jpegCallback.onPictureTaken(jpegData, camera)
                             }
                         }
                     }.start()

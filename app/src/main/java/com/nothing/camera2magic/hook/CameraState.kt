@@ -6,7 +6,7 @@ import android.view.Surface
  * @param sensorOrientation 90 / 270
  * @param pictureWidth not the final picture size
  * @param pictureHeight not the final picture size
- * @param previewType 0: unknown, 1: texture, 2: display
+ * @param packageName app package name
  * @param displayOrientation 0, 90, 180, 270
  * @param surface preview surface
  */
