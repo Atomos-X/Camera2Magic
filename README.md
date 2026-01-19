@@ -29,6 +29,7 @@
   - [x] 删除未使用资源，减少安装包体积: 48M -> 8M  
   - [x] native端混沌代码重写为模块化  
   - [x] 改善 camera1 api 拍照性能，由native端直接生成jpeg ByteArray，不再使用java端生成照片  
+  
     
 ### hook camera1/2 api  
   - [x] 初步检测目标应用的工作模式（普通，扫码，人脸检测）
@@ -67,6 +68,7 @@
   - [x] camera2 api 部分应用在某些菜单中切换(`tiktok: POST<->TEMPLATES`)，未能正确hook相机的close信号，导致无法预期的停止启动解码线程。 已修复    
   - [x] 如果是在运行时授权应用相机权限，4k视频在较早机型上存在音频偷跑、视频马赛克，可在正常预览后通过切换前后摄像头临时解决，sm8250 lpddr4 8g ram，4k视频处理vpu极限了。  已修复
   - [x] 某些应用的surface ratio切换时不能正确处理导致画面卡住。 已修复
+  - [x] FFmpeg的av_find_best_stream在找不到流时，返回值不是预期的 -1，导致使用`m_audio_stream_index != -1` 判断失效。  已修复
     
 ### 向目标应用注入浮动窗口，用来开发调试      
   - [x] 浮动窗口框架  
