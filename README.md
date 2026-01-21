@@ -28,7 +28,11 @@
 ### 优化
   - [x] 删除未使用资源，减少安装包体积: 48M -> 8M  
   - [x] native端混沌代码重写为模块化  
-  - [x] 改善 camera1 api 拍照性能，由native端直接生成jpeg ByteArray，不再使用java端生成照片  
+  - [x] 改善 camera1 api 拍照性能，由native端直接生成jpeg ByteArray，不再使用java端生成照片 
+  - [x] 移除 CPU / 同步解码 nv21 bytes，这是一个不存在的需求。不支持GPU/异步转码的早期硬件性能无法支撑这个方案  
+  - [x] 移除 GLES 2.0 回滚支持，这也是一个几乎不存在的需求          
+  - [x] 强制开启 Triple-Buffered PBO，移除回滚代码  
+  - [x] 新增 VAO 优化  
   
     
 ### hook camera1/2 api  
