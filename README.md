@@ -33,6 +33,7 @@
   - [x] 移除 GLES 2.0 回滚支持，这也是一个几乎不存在的需求          
   - [x] 强制开启 Triple-Buffered PBO，移除回滚代码  
   - [x] 新增 VAO 优化  
+  - [x] 在目标App Camera HAL pipeline没有重建的情况下，使用热更新surface保证解码渲染的连续性   
   
     
 ### hook camera1/2 api  
