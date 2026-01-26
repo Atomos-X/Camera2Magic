@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import androidx.core.content.edit
 
 class SettingsViewModel(
     app: Application,
@@ -16,6 +17,7 @@ class SettingsViewModel(
     val uiState = _uiState.asStateFlow()
 
     companion object {
+        private const val KEY_MODULE_ENABLED = "module_enabled"
         private const val KEY_PLAY_SOUND = "play_sound"
         private const val KEY_ENABLE_LOG = "enable_log"
         private const val KEY_INJECT_MENU_ENABLED = "inject_menu"
@@ -25,7 +27,11 @@ class SettingsViewModel(
     init {
         loadInitialSettings()
     }
-
+    fun onModuleToggled() {
+        val newState = !_uiState.value.isModuleEnabled
+        _uiState.update { it.copy(isModuleEnabled = newState) }
+        saveBoolean(KEY_MODULE_ENABLED, newState)
+    }
     fun onPlaySoundToggled() {
         val newState = !_uiState.value.soundEnabled
         _uiState.update { it.copy(soundEnabled = newState) }
@@ -51,6 +57,7 @@ class SettingsViewModel(
 
     private fun loadInitialSettings() {
         _uiState.value = SettingsUiState(
+            isModuleEnabled = prefs?.getBoolean(KEY_MODULE_ENABLED, true) ?: true,
             soundEnabled = prefs?.getBoolean(KEY_PLAY_SOUND, false) ?: false,
             logEnabled = prefs?.getBoolean(KEY_ENABLE_LOG, false) ?: false,
             injectMenuEnabled = prefs?.getBoolean(KEY_INJECT_MENU_ENABLED, false) ?: false,
@@ -59,11 +66,12 @@ class SettingsViewModel(
     }
 
     private fun saveBoolean(key: String, value: Boolean) {
-        prefs?.edit()?.putBoolean(key, value)?.apply()
+        prefs?.edit { putBoolean(key, value) }
     }
 }
 
 data class SettingsUiState(
+    val isModuleEnabled: Boolean = true,
     val soundEnabled: Boolean = false,
     val logEnabled: Boolean = false,
     val injectMenuEnabled: Boolean = false,

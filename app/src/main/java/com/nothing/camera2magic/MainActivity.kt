@@ -1,6 +1,5 @@
 package com.nothing.camera2magic
 
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -23,52 +22,39 @@ import androidx.compose.ui.unit.sp
 import com.nothing.camera2magic.ui.theme.VirtualCameraXTheme
 import com.nothing.camera2magic.view.SettingsView
 import com.nothing.camera2magic.view.SpotlightView
-import com.nothing.camera2magic.viewmodel.LocalPrefs
-import java.lang.SecurityException
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
 class MainActivity : ComponentActivity() {
-    companion object{
-        private const val PREFS_NAME = "virtual_camera_x_prefs"
-    }
+
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        val prefs = try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_WORLD_READABLE)
-        } catch (e: SecurityException) {
-            null
-        }
         enableEdgeToEdge()
         setContent {
             VirtualCameraXTheme(dynamicColor = true) {
-                CompositionLocalProvider(LocalPrefs provides prefs) {
-                    val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        listOf(
-                            android.Manifest.permission.READ_MEDIA_IMAGES,
-                            android.Manifest.permission.READ_MEDIA_VIDEO
-                        )
+                val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    listOf(
+                        android.Manifest.permission.READ_MEDIA_IMAGES,
+                        android.Manifest.permission.READ_MEDIA_VIDEO
+                    )
+                } else {
+                    listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                }
+
+                // 2. 创建并记住权限状态
+                val permissionState = rememberMultiplePermissionsState(permissions)
+
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    if(permissionState.allPermissionsGranted) {
+                        MainScreen()
                     } else {
-                        listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                    }
-
-                    // 2. 创建并记住权限状态
-                    val permissionState = rememberMultiplePermissionsState(permissions)
-
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        if(permissionState.allPermissionsGranted) {
-                            MainScreen()
-                        } else {
-                            PermissionRationaleScreen(
-                                onGrantPermissionClick = { permissionState.launchMultiplePermissionRequest() }
-                            )
-                        }
-
+                        PermissionRationaleScreen(
+                            onGrantPermissionClick = { permissionState.launchMultiplePermissionRequest() }
+                        )
                     }
                 }
             }

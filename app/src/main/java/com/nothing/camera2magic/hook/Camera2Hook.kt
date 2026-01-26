@@ -9,7 +9,7 @@ import android.hardware.camera2.params.SessionConfiguration
 import android.os.Handler
 import android.view.Surface
 import android.view.WindowManager
-import com.nothing.camera2magic.GlobalHookState
+import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.hook.MagicNative.needStartRenderer
 import com.nothing.camera2magic.hook.MagicNative.needStopRenderer
 import com.nothing.camera2magic.hook.MagicNative.registerSurfaceIfNew
@@ -119,7 +119,7 @@ fun camera2Hook(lpparam: LoadPackageParam) {
             state.cameraId = camera.id
             state.packageName = pkg
 
-            val context = GlobalHookState.appContext
+            val context = GlobalState.appContext
             if (context != null) {
                 state.displayOrientation = getDisplayOrientation(context)
                 state.sensorOrientation = getSensorOrientation(context, camera.id)

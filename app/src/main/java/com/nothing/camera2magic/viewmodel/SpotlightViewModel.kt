@@ -32,7 +32,6 @@ class SpotlightViewModel(
     companion object {
         const val KEY_VIDEO_ID = "video_id"
         const val KEY_IMAGE_ID = "image_id"
-        const val KEY_MODULE_ENABLED = "module_enabled"
     }
 
     init {
@@ -64,16 +63,10 @@ class SpotlightViewModel(
         removeString(KEY_IMAGE_ID)
     }
 
-    fun onModuleToggled() {
-        val newState = !_uiState.value.isModuleEnabled
-        _uiState.update { it.copy(isModuleEnabled = newState) }
-        saveBoolean(KEY_MODULE_ENABLED, newState)
-    }
-
     private fun loadInitialSettings() {
         _uiState.update {
             it.copy(
-                isModuleEnabled = prefs?.getBoolean(KEY_MODULE_ENABLED, true) ?: true
+                // TODO:
             )
         }
     }
@@ -151,5 +144,5 @@ class SpotlightViewModel(
 }
 
 data class SpotlightUiState(
-    val isModuleEnabled: Boolean = true
+    val mediaType: Int = 0
 )

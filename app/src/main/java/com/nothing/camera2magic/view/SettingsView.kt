@@ -6,17 +6,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,6 +38,7 @@ import com.nothing.camera2magic.viewmodel.SettingsViewModel
 import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.sp
 import com.nothing.camera2magic.R
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -41,9 +47,15 @@ fun SettingsView() {
     val context = LocalContext.current
     val prefs = LocalPrefs.current
     val viewModel: SettingsViewModel = viewModel(
-        factory = ViewModelFactory(context.applicationContext as Application, prefs)
+        factory = ViewModelFactory(context.applicationContext as Application)
     )
     val uiState by viewModel.uiState.collectAsState()
+
+    ModuleSwitch(
+        text = stringResource(R.string.module_switch_name),
+        isChecked = uiState.isModuleEnabled,
+        onCheckedChange = { viewModel.onModuleToggled() }
+    )
 
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -83,6 +95,42 @@ fun SettingsView() {
             icon = ImageVector.vectorResource(R.drawable.rotate_90_degrees_cw_24px),
             isChecked = uiState.manuallyRotateEnabled,
             onClick = { viewModel.onManuallyRotateToggled() }
+        )
+    }
+}
+
+@Composable
+private fun ModuleSwitch(
+    text: String,
+    isChecked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = ImageVector.vectorResource(R.drawable.developer_board_24px),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        }
+        Switch(
+            checked = isChecked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
         )
     }
 }

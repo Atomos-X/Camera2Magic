@@ -1,63 +1,76 @@
 package com.nothing.camera2magic
 
+
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.hook.MagicNative
-import com.nothing.camera2magic.hook.MagicNative.updateVideoSource
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
-import com.nothing.camera2magic.hook.camera1Hook
-import com.nothing.camera2magic.hook.camera2Hook
+import com.nothing.camera2magic.utils.Dog
+import com.nothing.camera2magic.utils.FloatWindowManager
+import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedInterface.BeforeHookCallback
 
-object GlobalHookState {
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+
+
+object GlobalState {
     @Volatile
     var appContext: Context? = null
 }
+private lateinit var module: MagicEntry
+private const val TAG = "[Entry]"
+class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule(base, param) {
 
-class MagicEntry : IXposedHookLoadPackage {
-
-    external fun nativeInit()
-
-    companion object {
-        private const val TAG = "[MAGIC]"
-        private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
-
-        init {
-            // System.loadLibrary("shadowhook")
-            System.loadLibrary("camera_magic")
-        }
-
+    init {
+        System.loadLibrary("camera_magic")
+        Dog.w(TAG, "MagicEntry at ${param.processName}", true)
+        module = this
     }
-
-    override fun handleLoadPackage(lpparam: LoadPackageParam) {
-
-        if (lpparam.packageName == MODULE_PACKAGE_NAME) return
-        XposedHelpers.findAndHookMethod(Application::class.java, "onCreate", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    val context = param.thisObject as Application
-                    GlobalHookState.appContext = context
-                    val magicEntryInstance = MagicEntry()
-                    magicEntryInstance.nativeInit()
-                    magicEntryInstance.hookActivity()
-                    camera1Hook(lpparam)
-                    camera2Hook(lpparam)
-                    FloatWindowManager.init(context)
-                }
-            })
-    }
-
-    private fun hookActivity() {
-        XposedHelpers.findAndHookMethod(Activity::class.java, "onResume", object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
-                updateVideoSource()
-                val activity = param.thisObject as Activity
-                FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
+    /**
+     * API 100
+     */
+    class AttachHooker : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun before(callback: BeforeHookCallback) {
+                val context = callback.args[0] as Context
+                GlobalState.appContext = context
+                val application = callback.thisObject as Application
+                FloatWindowManager.init(application)
             }
-        })
+        }
+    }
+    /**
+     * API 100 Hooker: 监控 Activity 状态
+     */
+    class ActivityHooker : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun after(callback: XposedInterface.AfterHookCallback) {
+                val activity = callback.thisObject as Activity
+                MagicNative.updateVideoSource()
+                FloatWindowManager.updateFloatWindowVisibility(activity, true)
+            }
+        }
+    }
+    /**
+     * 目标应用包加载时回调
+     */
+    @SuppressLint("DiscouragedPrivateApi")
+    override fun onPackageLoaded(param: PackageLoadedParam) {
+        super.onPackageLoaded(param)
+        if (!param.isFirstPackage) return
+
+        val attachMethod = Application::class.java.getDeclaredMethod("attach", Context::class.java)
+        hook(attachMethod, AttachHooker::class.java)
+
+        val resumeMethod = Activity::class.java.getDeclaredMethod("onResume")
+        hook(resumeMethod, ActivityHooker::class.java)
+
+        MagicNative.registerJavaFunc()
+
     }
 }

@@ -7,7 +7,7 @@ import android.database.Cursor
 import android.hardware.Camera
 import android.provider.MediaStore
 import android.view.Surface
-import com.nothing.camera2magic.GlobalHookState
+import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.utils.PreviewNV21Helper
@@ -22,7 +22,7 @@ object MagicNative {
     private const val KEY_ENABLE_LOG = "enable_log"
     private const val KEY_INJECT_MENU = "inject_menu"
     private const val KEY_MANUALLY_ROTATE = "manually_rotate"
-    private const val PREFS_NAME = "virtual_camera_x_prefs"
+    private const val PREFS_NAME = "main_config"
     private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
 
     private val prefs: XSharedPreferences = XSharedPreferences(MODULE_PACKAGE_NAME, PREFS_NAME)
@@ -97,6 +97,9 @@ object MagicNative {
         // 分发给 camera2
         previewCallback?.invoke(buffer, width, height)
     }
+
+    @JvmStatic
+    external fun registerJavaFunc()
     @JvmStatic
     external fun updateNativeConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
@@ -150,11 +153,12 @@ object MagicNative {
             injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
             manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
             updateNativeConfig(playSound, enableLog, manuallyRotate)
+            Dog.w(TAG, "playSound: $playSound, enableLog: $enableLog, injectMenuEnabled: $injectMenuEnabled, manuallyRotate: $manuallyRotate",true)
         } catch (e: Exception) { /* Do Nothing */ }
     }
 
     fun updateVideoSource() {
-        val context = GlobalHookState.appContext ?: return
+        val context = GlobalState.appContext ?: return
 
         val oldVideoId = videoID
         refreshPrefs()
