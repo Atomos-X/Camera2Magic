@@ -28,7 +28,6 @@ class MagicEntry : IXposedHookLoadPackage {
         private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
 
         init {
-            // System.loadLibrary("shadowhook")
             System.loadLibrary("camera_magic")
         }
 
