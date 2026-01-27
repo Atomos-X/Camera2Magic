@@ -3,7 +3,7 @@
 package com.nothing.camera2magic.hook
 
 import android.content.ContentUris
-import android.database.Cursor
+import android.content.SharedPreferences
 import android.hardware.Camera
 import android.provider.MediaStore
 import android.view.Surface
@@ -11,23 +11,24 @@ import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.utils.FloatWindowManager
 import com.nothing.camera2magic.utils.PreviewNV21Helper
-import de.robv.android.xposed.XSharedPreferences
 import java.lang.ref.WeakReference
 
 object MagicNative {
     private const val TAG = "[NATIVE]"
-    private const val KEY_VIDEO_ID = "video_id"
-    private const val KEY_MODULE_ENABLED = "module_enabled"
-    private const val KEY_PLAY_SOUND = "play_sound"
-    private const val KEY_ENABLE_LOG = "enable_log"
-    private const val KEY_INJECT_MENU = "inject_menu"
-    private const val KEY_MANUALLY_ROTATE = "manually_rotate"
-    private const val PREFS_NAME = "main_config"
-    private const val MODULE_PACKAGE_NAME = "com.nothing.camera2magic"
+    private const val KEY_VIDEO_ID = "local_video_id"
+    private const val KEY_MODULE_ENABLED = "main_module_enabled"
+    private const val KEY_PLAY_SOUND = "main_play_sound"
+    private const val KEY_ENABLE_LOG = "main_enable_log"
+    private const val KEY_INJECT_MENU = "main_inject_menu"
+    private const val KEY_MANUALLY_ROTATE = "main_manually_rotate"
 
-    private val prefs: XSharedPreferences = XSharedPreferences(MODULE_PACKAGE_NAME, PREFS_NAME)
+    private lateinit var prefs: SharedPreferences
 
-    private var videoID: String? = null
+    fun init(remotePrefs: SharedPreferences) {
+        this.prefs = remotePrefs
+        refreshPrefs()
+    }
+
     private var cachedBuffer: ByteArray? = null
 
     var lastFrameWidth = 0
@@ -36,7 +37,8 @@ object MagicNative {
     var camera1Callback: Camera.PreviewCallback? = null
     var currentCamera1: Camera? = null
     var previewCallback: ((data: ByteArray, width: Int, height: Int) -> Unit)? = null
-
+    @Volatile
+    private var videoID: Long = -1L
     @Volatile
     var moduleEnabled: Boolean = true
         private set
@@ -99,8 +101,6 @@ object MagicNative {
     }
 
     @JvmStatic
-    external fun registerJavaFunc()
-    @JvmStatic
     external fun updateNativeConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
     external fun registerSurface(apiLevel: Int, cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
@@ -145,15 +145,14 @@ object MagicNative {
 
     fun refreshPrefs() {
         try {
-            prefs.reload()
-            videoID = prefs.getString(KEY_VIDEO_ID, null)
+            if (!::prefs.isInitialized) return
+            videoID = prefs.getLong(KEY_VIDEO_ID, -1L)
             moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
             playSound = prefs.getBoolean(KEY_PLAY_SOUND, false)
             enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false)
             injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
             manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
             updateNativeConfig(playSound, enableLog, manuallyRotate)
-            Dog.w(TAG, "playSound: $playSound, enableLog: $enableLog, injectMenuEnabled: $injectMenuEnabled, manuallyRotate: $manuallyRotate",true)
         } catch (e: Exception) { /* Do Nothing */ }
     }
 
@@ -164,50 +163,26 @@ object MagicNative {
         refreshPrefs()
         val newVideoId = videoID
 
-        if (newVideoId == null) {
-            if ( oldVideoId != null) resetVideoSource()
+        if (newVideoId == -1L) {
+            if ( oldVideoId != -1L) resetVideoSource()
             videoSourceIsReady = false
             return
         }
-        var isUriValid = false
-        var shouldProcessVideo = false
+        val shouldProcess = (newVideoId != oldVideoId) || !videoSourceIsReady
+        if (!shouldProcess) return
 
+        val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, newVideoId)
         try {
-            val id = newVideoId.toLong()
-            val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
-            val cursor: Cursor? = context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), null, null, null)
-            cursor?.use { c ->
-                if (c.moveToFirst()) {
-                    isUriValid = true
-                }
-                if (isUriValid) {
-                    if (newVideoId != oldVideoId) {
-                        shouldProcessVideo = true
-                    } else {
-                        if (!videoSourceIsReady) {
-                            shouldProcessVideo = true
-                        }
-                    }
-                }
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                videoSourceIsReady = processVideo(
+                    afd.parcelFileDescriptor.fd,
+                    afd.startOffset,
+                    afd.length
+                )
             }
+        } catch (_: SecurityException) {
+            videoSourceIsReady = false
         } catch (e: Exception) {
-            Dog.e(TAG, "Error updating video source: ${e.message}", null, enableLog)
-            isUriValid = false
-        }
-
-        if (isUriValid) {
-            if (shouldProcessVideo) {
-                val id = newVideoId.toLong()
-                val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
-                try {
-                    context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { pfd ->
-                        videoSourceIsReady = processVideo(pfd.parcelFileDescriptor.fd, pfd.startOffset, pfd.length)
-                    }
-                }catch (e: Exception) {
-                    videoSourceIsReady = false
-                }
-            }
-        } else {
             prefs.edit().remove(KEY_VIDEO_ID).apply()
             resetVideoSource()
             videoSourceIsReady = false

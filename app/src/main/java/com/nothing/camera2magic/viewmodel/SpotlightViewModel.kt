@@ -1,12 +1,14 @@
 package com.nothing.camera2magic.viewmodel
 
 import android.app.Application
+import android.content.ContentUris
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Size
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,8 +19,7 @@ import java.lang.Exception
 
 class SpotlightViewModel(
     private val app: Application,
-    private val prefs: SharedPreferences?
-) : AndroidViewModel(app) {
+    private val repository: ConfigRepository) : ViewModel() {
 
     private val _videoThumbnail = MutableStateFlow<Bitmap?>(null)
     val videoThumbnail = _videoThumbnail.asStateFlow()
@@ -29,20 +30,23 @@ class SpotlightViewModel(
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState = _uiState.asStateFlow()
 
-    companion object {
-        const val KEY_VIDEO_ID = "video_id"
-        const val KEY_IMAGE_ID = "image_id"
-    }
-
     init {
         // check if video file deleted
         performHealthCheckAndRefresh()
-        loadInitialSettings()
+         loadInitialSettings()
     }
 
     fun performHealthCheckAndRefresh() {
-        loadAndVerifyMedia(KEY_VIDEO_ID, MediaType.VIDEO)
-        loadAndVerifyMedia(KEY_IMAGE_ID, MediaType.IMAGE)
+        loadAndVerifyMedia(MediaType.VIDEO)
+        loadAndVerifyMedia(MediaType.IMAGE)
+    }
+
+    fun onModuleToggled() {
+        _uiState.update { currentState ->
+            val newState = !currentState.moduleEnabled
+            repository.moduleEnabled = newState
+            currentState.copy(moduleEnabled = newState)
+        }
     }
 
     fun onVideoSelected(uri: Uri?) {
@@ -55,31 +59,34 @@ class SpotlightViewModel(
 
     fun clearVideo() {
         _videoThumbnail.value = null
-        removeString(KEY_VIDEO_ID)
+        repository.videoId = -1L
     }
 
     fun clearImage() {
         _imageThumbnail.value = null
-        removeString(KEY_IMAGE_ID)
+        repository.imageId = -1L
     }
 
     private fun loadInitialSettings() {
         _uiState.update {
             it.copy(
-                // TODO:
+                moduleEnabled = repository.moduleEnabled
             )
         }
     }
 
     private fun handleMediaSelection(uri: Uri?, mediaType: MediaType) {
-        val key = if (mediaType == MediaType.VIDEO) KEY_VIDEO_ID else KEY_IMAGE_ID
-        if (uri == null) {
-            return
-        }
 
-        uri.lastPathSegment?.substringAfterLast(":")?.let { mediaId ->
-            saveString(key, mediaId)
-            loadAndVerifyMedia(key, mediaType, mediaId)
+        if (uri == null) return
+        val mediaId = try {
+            uri.lastPathSegment?.toLongOrNull()
+        } catch (_: kotlin.Exception) { null }
+        if (mediaId != null) {
+            when(mediaType) {
+                MediaType.VIDEO -> repository.videoId = mediaId
+                MediaType.IMAGE -> repository.imageId = mediaId
+            }
+            loadAndVerifyMedia(mediaType, mediaId)
         }
     }
 
@@ -90,10 +97,14 @@ class SpotlightViewModel(
         }
     }
 
-    private fun loadAndVerifyMedia(key: String, mediaType: MediaType, mediaIdOverride: String? = null) {
+    private fun loadAndVerifyMedia(mediaType: MediaType, mediaIdOverride: Long? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            val mediaId = mediaIdOverride ?: prefs?.getString(key, null)
-            if (mediaId == null) {
+            val mediaId = mediaIdOverride ?: if (mediaType == MediaType.VIDEO) {
+                repository.videoId
+            } else {
+                repository.imageId
+            }
+            if (mediaId == -1L) {
                 updateThumbnailState(mediaType, null)
                 return@launch
             }
@@ -105,7 +116,7 @@ class SpotlightViewModel(
                     MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                     MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 }
-                val uri = Uri.withAppendedPath(contentUri, mediaId)
+                val uri = ContentUris.withAppendedId(contentUri, mediaId)
                 app.contentResolver.openFileDescriptor(uri, "r")?.use {
                     isMediaValid = true
                     thumbnail = app.contentResolver.loadThumbnail(uri, Size(720, 1280), null)
@@ -119,23 +130,13 @@ class SpotlightViewModel(
             } else {
                 updateThumbnailState(mediaType, null)
                 if (mediaIdOverride == null) {
-                    removeString(key)
+                    when (mediaType) {
+                        MediaType.VIDEO -> repository.videoId = -1L
+                        MediaType.IMAGE -> repository.imageId = -1L
+                    }
                 }
             }
         }
-    }
-
-
-    private fun saveString(key: String, value: String) {
-        prefs?.edit()?.putString(key, value)?.apply()
-    }
-
-    private fun removeString(key: String) {
-        prefs?.edit()?.remove(key)?.apply()
-    }
-
-    private fun saveBoolean(key: String, value: Boolean) {
-        prefs?.edit()?.putBoolean(key, value)?.apply()
     }
 
     private enum class MediaType {
@@ -144,5 +145,6 @@ class SpotlightViewModel(
 }
 
 data class SpotlightUiState(
+    val moduleEnabled: Boolean = true,
     val mediaType: Int = 0
 )

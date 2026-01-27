@@ -17,7 +17,10 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.VirtualCameraX">
+        android:theme="@style/Theme.VirtualCameraX"
+        android:description="@string/app_description"
+        android:extractNativeLibs="false">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,10 +28,8 @@
             android:theme="@style/Theme.VirtualCameraX">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
-
 </manifest>

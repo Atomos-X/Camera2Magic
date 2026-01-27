@@ -1,6 +1,7 @@
 package com.nothing.camera2magic.view
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,20 +39,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nothing.camera2magic.viewmodel.LocalPrefs
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
-import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpotlightView() {
-
-    val context = LocalContext.current
-    val prefs = LocalPrefs.current
-    val viewModel: SpotlightViewModel = viewModel(
-        factory = ViewModelFactory(context.applicationContext as Application)
-    )
+    val factory = LocalViewModelFactory.current
+    val viewModel: SpotlightViewModel = viewModel(factory = factory)
 
     val videoThumbnail by viewModel.videoThumbnail.collectAsState()
     val imageThumbnail by viewModel.imageThumbnail.collectAsState()
@@ -122,7 +118,11 @@ fun SpotlightView() {
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
-
+            ModuleSwitch(
+                text = stringResource(R.string.module_switch_name),
+                isChecked = uiState.moduleEnabled,
+                onCheckedChange = { viewModel.onModuleToggled() }
+            )
         }
     }
     OnLifecycleEvent { event ->
@@ -208,6 +208,43 @@ private fun MediaThumbnailCard(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun ModuleSwitch(
+    text: String,
+    isChecked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = ImageVector.vectorResource(R.drawable.developer_board_24px),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        }
+        Switch(
+            checked = isChecked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
+        )
     }
 }
 

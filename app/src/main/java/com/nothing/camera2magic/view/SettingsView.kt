@@ -29,33 +29,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nothing.camera2magic.viewmodel.LocalPrefs
 import com.nothing.camera2magic.viewmodel.SettingsViewModel
-import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.sp
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsView() {
-    val context = LocalContext.current
-    val prefs = LocalPrefs.current
-    val viewModel: SettingsViewModel = viewModel(
-        factory = ViewModelFactory(context.applicationContext as Application)
-    )
+    val factory = LocalViewModelFactory.current
+    val viewModel: SettingsViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
-
-    ModuleSwitch(
-        text = stringResource(R.string.module_switch_name),
-        isChecked = uiState.isModuleEnabled,
-        onCheckedChange = { viewModel.onModuleToggled() }
-    )
 
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
@@ -68,7 +57,7 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.play_sound_button_name),
             icon = ImageVector.vectorResource(R.drawable.volume_up_24px),
-            isChecked = uiState.soundEnabled,
+            isChecked = uiState.playSound,
             onClick = { viewModel.onPlaySoundToggled() }
         )
 
@@ -77,7 +66,7 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.enable_log_button_name),
             icon = ImageVector.vectorResource(R.drawable.breaking_news_24px),
-            isChecked = uiState.logEnabled,
+            isChecked = uiState.enableLog,
             onClick = { viewModel.onEnableLogToggled() }
         )
 
@@ -86,51 +75,15 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.inject_control_button_name),
             icon = ImageVector.vectorResource(R.drawable.control_camera_24px),
-            isChecked = uiState.injectMenuEnabled,
+            isChecked = uiState.injectMenu,
             onClick = { viewModel.onInjectMenuToggled() }
         )
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.manually_rotate_button_name),
             icon = ImageVector.vectorResource(R.drawable.rotate_90_degrees_cw_24px),
-            isChecked = uiState.manuallyRotateEnabled,
+            isChecked = uiState.manuallyRotate,
             onClick = { viewModel.onManuallyRotateToggled() }
-        )
-    }
-}
-
-@Composable
-private fun ModuleSwitch(
-    text: String,
-    isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = ImageVector.vectorResource(R.drawable.developer_board_24px),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(text = text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-        }
-        Switch(
-            checked = isChecked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                uncheckedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
         )
     }
 }
