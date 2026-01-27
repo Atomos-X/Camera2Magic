@@ -11,6 +11,7 @@ import com.nothing.camera2magic.hook.MagicNative
 import com.nothing.camera2magic.utils.FloatWindowManager
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
+import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
@@ -40,7 +41,7 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
     class ActivityHooker : XposedInterface.Hooker {
         companion object {
             @JvmStatic
-            fun after(callback: XposedInterface.AfterHookCallback) {
+            fun after(callback: AfterHookCallback) {
                 val activity = callback.thisObject as Activity
                 MagicNative.updateVideoSource()
                 FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)

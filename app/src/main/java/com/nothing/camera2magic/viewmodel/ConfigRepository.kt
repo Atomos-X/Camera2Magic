@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
+import androidx.core.content.edit
 
 private const val TAG = "[VCX][ConfigRepo]"
 private const val GROUP_NAME = "camera_magic_config"
@@ -16,7 +17,6 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         XposedServiceHelper.registerListener(object : XposedServiceHelper.OnServiceListener {
             override fun onServiceBind(service: XposedService) {
                 xposedService = service
-                Log.w(TAG, "LSP_Service,服务链接成功，当前权限等级：${service.frameworkPrivilege}")
                 syncAllToRemote()
             }
             override fun onServiceDied(service: XposedService) {
@@ -26,29 +26,30 @@ class ConfigRepository(private val prefs: SharedPreferences) {
     }
 
     private fun <T> save(key: String, value: T) {
-        val editor = prefs.edit()
-        when (value) {
-            is Boolean -> editor.putBoolean(key, value)
-            is Int -> editor.putInt(key, value)
-            is Long -> editor.putLong(key, value)
-            is Float -> editor.putFloat(key, value)
-            is String -> editor.putString(key, value)
-            else -> throw IllegalArgumentException("Unsupported type")
+        prefs.edit {
+            when (value) {
+                is Boolean -> putBoolean(key, value)
+                is Int -> putInt(key, value)
+                is Long -> putLong(key, value)
+                is Float -> putFloat(key, value)
+                is String -> putString(key, value)
+                else -> throw IllegalArgumentException("Unsupported type")
+            }
         }
-        editor.apply()
+
         xposedService?.let { service ->
             try {
                 val remotePrefs = service.getRemotePreferences(GROUP_NAME)
-                val remoteEditor = remotePrefs.edit()
-                when (value) {
-                    is Boolean -> remoteEditor.putBoolean(key, value)
-                    is Int -> remoteEditor.putInt(key, value)
-                    is Long -> remoteEditor.putLong(key, value)
-                    is Float -> remoteEditor.putFloat(key, value)
-                    is String -> remoteEditor.putString(key, value)
-                    else -> throw IllegalArgumentException("Unsupported type")
+                remotePrefs.edit {
+                    when (value) {
+                        is Boolean -> putBoolean(key, value)
+                        is Int -> putInt(key, value)
+                        is Long -> putLong(key, value)
+                        is Float -> putFloat(key, value)
+                        is String -> putString(key, value)
+                        else -> throw IllegalArgumentException("Unsupported type")
+                    }
                 }
-                remoteEditor.apply()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update remote preferences", e)
             }
@@ -57,18 +58,19 @@ class ConfigRepository(private val prefs: SharedPreferences) {
 
     private fun syncAllToRemote() {
         xposedService?.let { service ->
-            val remoteEditor = service.getRemotePreferences(GROUP_NAME).edit()
-            prefs.all.forEach { (key, value) ->
-                when (value) {
-                    is Boolean -> remoteEditor.putBoolean(key, value)
-                    is Int -> remoteEditor.putInt(key, value)
-                    is Long -> remoteEditor.putLong(key, value)
-                    is Float -> remoteEditor.putFloat(key, value)
-                    is String -> remoteEditor.putString(key, value)
-                    else -> throw IllegalArgumentException("Unsupported type")
+            val remotePrefs = service.getRemotePreferences(GROUP_NAME)
+            remotePrefs.edit {
+                prefs.all.forEach { (key, value) ->
+                    when (value) {
+                        is Boolean -> putBoolean(key, value)
+                        is Int -> putInt(key, value)
+                        is Long -> putLong(key, value)
+                        is Float -> putFloat(key, value)
+                        is String -> putString(key, value)
+                        else -> throw IllegalArgumentException("Unsupported type")
+                    }
                 }
             }
-            remoteEditor.apply()
         }
     }
 

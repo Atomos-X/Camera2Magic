@@ -1,9 +1,6 @@
 package com.nothing.camera2magic.view
 
-import android.app.Application
-import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -28,7 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -42,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
 import com.nothing.camera2magic.R
 import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
+import com.nothing.camera2magic.viewmodel.MediaType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,21 +46,25 @@ fun SpotlightView() {
     val factory = LocalViewModelFactory.current
     val viewModel: SpotlightViewModel = viewModel(factory = factory)
 
-    val videoThumbnail by viewModel.videoThumbnail.collectAsState()
-    val imageThumbnail by viewModel.imageThumbnail.collectAsState()
+    val mediaThumbnails by viewModel.thumbnails.collectAsState()
+
     val uiState by viewModel.uiState.collectAsState()
 
     val mediaTypes = stringArrayResource(R.array.media_types)
     var selectedMediaTypeIndex by remember { mutableIntStateOf(0) }
 
-    val pickVideoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? -> viewModel.onVideoSelected(uri) }
-    )
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? -> viewModel.onImageSelected(uri) }
-    )
+    var pendingType by remember { mutableStateOf<MediaType?>(null) }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+        pendingType?.let { type ->
+            viewModel.onMediaSelected(type, it)
+        }
+    }
+
+    val pickMedia = { type: MediaType ->
+        pendingType = type
+        launcher.launch(type.mimeType)
+    }
 
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -88,8 +89,7 @@ fun SpotlightView() {
                                     modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
                                 )
                             }
-                        }
-                    ) {
+                        }) {
                         Text(label)
                     }
                 }
@@ -103,16 +103,16 @@ fun SpotlightView() {
             ) {
                 MediaThumbnailCard(
                     modifier = Modifier.weight(1f),
-                    thumbnail = videoThumbnail,
-                    onClick = { pickVideoLauncher.launch("video/*") },
-                    onClear = { viewModel.clearVideo() }
+                    thumbnail = mediaThumbnails[MediaType.VIDEO],
+                    onClick = { pickMedia(MediaType.VIDEO) },
+                    onClear = { viewModel.clearMedia(MediaType.VIDEO) }
                 )
                 // 本地图片卡片 (现在功能完整)
                 MediaThumbnailCard(
                     modifier = Modifier.weight(1f),
-                    thumbnail = imageThumbnail,
-                    onClick = { pickImageLauncher.launch("image/*") },
-                    onClear = { viewModel.clearImage() }
+                    thumbnail = mediaThumbnails[MediaType.IMAGE],
+                    onClick = { pickMedia(MediaType.IMAGE) },
+                    onClear = { viewModel.clearMedia(MediaType.IMAGE) }
                 )
             }
 
