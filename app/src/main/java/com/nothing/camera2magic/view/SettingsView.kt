@@ -6,17 +6,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -24,25 +29,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nothing.camera2magic.viewmodel.LocalPrefs
 import com.nothing.camera2magic.viewmodel.SettingsViewModel
-import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.sp
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsView() {
-    val context = LocalContext.current
-    val prefs = LocalPrefs.current
-    val viewModel: SettingsViewModel = viewModel(
-        factory = ViewModelFactory(context.applicationContext as Application, prefs)
-    )
+    val factory = LocalViewModelFactory.current
+    val viewModel: SettingsViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
 
     FlowRow(
@@ -56,7 +57,7 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.play_sound_button_name),
             icon = ImageVector.vectorResource(R.drawable.volume_up_24px),
-            isChecked = uiState.soundEnabled,
+            isChecked = uiState.playSound,
             onClick = { viewModel.onPlaySoundToggled() }
         )
 
@@ -65,7 +66,7 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.enable_log_button_name),
             icon = ImageVector.vectorResource(R.drawable.breaking_news_24px),
-            isChecked = uiState.logEnabled,
+            isChecked = uiState.enableLog,
             onClick = { viewModel.onEnableLogToggled() }
         )
 
@@ -74,14 +75,14 @@ fun SettingsView() {
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.inject_control_button_name),
             icon = ImageVector.vectorResource(R.drawable.control_camera_24px),
-            isChecked = uiState.injectMenuEnabled,
+            isChecked = uiState.injectMenu,
             onClick = { viewModel.onInjectMenuToggled() }
         )
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.manually_rotate_button_name),
             icon = ImageVector.vectorResource(R.drawable.rotate_90_degrees_cw_24px),
-            isChecked = uiState.manuallyRotateEnabled,
+            isChecked = uiState.manuallyRotate,
             onClick = { viewModel.onManuallyRotateToggled() }
         )
     }

@@ -1,6 +1,10 @@
 package com.nothing.camera2magic.viewmodel
 
-import android.content.SharedPreferences
 import androidx.compose.runtime.staticCompositionLocalOf
 
-val LocalPrefs = staticCompositionLocalOf<SharedPreferences?> { null }
+val LocalConfigRepository = staticCompositionLocalOf<ConfigRepository> {
+    error("No ConfigRepository provided")
+}
+val LocalViewModelFactory = staticCompositionLocalOf<ViewModelFactory> {
+    error("No ViewModelFactory provided")
+}

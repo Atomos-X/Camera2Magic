@@ -1,6 +1,7 @@
 package com.nothing.camera2magic.view
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,27 +39,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nothing.camera2magic.viewmodel.LocalPrefs
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
-import com.nothing.camera2magic.viewmodel.ViewModelFactory
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpotlightView() {
-
-    val context = LocalContext.current
-    val prefs = LocalPrefs.current
-    val viewModel: SpotlightViewModel = viewModel(
-        factory = ViewModelFactory(context.applicationContext as Application, prefs)
-    )
+    val factory = LocalViewModelFactory.current
+    val viewModel: SpotlightViewModel = viewModel(factory = factory)
 
     val videoThumbnail by viewModel.videoThumbnail.collectAsState()
     val imageThumbnail by viewModel.imageThumbnail.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
     val mediaTypes = stringArrayResource(R.array.media_types)
-    var selectedMediaTypeIndex by remember { mutableStateOf(0) }
+    var selectedMediaTypeIndex by remember { mutableIntStateOf(0) }
 
     val pickVideoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -124,7 +120,7 @@ fun SpotlightView() {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
             ModuleSwitch(
                 text = stringResource(R.string.module_switch_name),
-                isChecked = uiState.isModuleEnabled,
+                isChecked = uiState.moduleEnabled,
                 onCheckedChange = { viewModel.onModuleToggled() }
             )
         }
@@ -214,6 +210,7 @@ private fun MediaThumbnailCard(
         }
     }
 }
+
 
 @Composable
 private fun ModuleSwitch(

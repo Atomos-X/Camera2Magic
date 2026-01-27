@@ -23,7 +23,6 @@ import android.widget.TextView
 import com.nothing.camera2magic.hook.UIUtils
 import com.nothing.camera2magic.view.IconLoader
 import com.nothing.camera2magic.view.ModIcon
-import de.robv.android.xposed.XposedBridge
 import kotlin.math.abs
 import kotlin.math.hypot
 
@@ -224,9 +223,7 @@ object FloatWindowManager : Application.ActivityLifecycleCallbacks {
         try {
             rootContainer?.visibility = View.VISIBLE
             windowManager?.addView(rootContainer, layoutParams)
-        } catch (e: Exception) {
-            XposedBridge.log(e)
-        }
+        } catch (_: Exception) { }
     }
 
     private fun createButtonItem(context: Context, icon: ModIcon, onClick: (View) -> Unit): ImageView {

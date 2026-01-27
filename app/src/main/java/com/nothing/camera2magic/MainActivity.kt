@@ -1,8 +1,10 @@
 package com.nothing.camera2magic
 
+import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,35 +25,32 @@ import androidx.compose.ui.unit.sp
 import com.nothing.camera2magic.ui.theme.VirtualCameraXTheme
 import com.nothing.camera2magic.view.SettingsView
 import com.nothing.camera2magic.view.SpotlightView
-import com.nothing.camera2magic.viewmodel.LocalPrefs
-import java.lang.SecurityException
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.nothing.camera2magic.viewmodel.ConfigRepository
+import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
+import com.nothing.camera2magic.viewmodel.ViewModelFactory
 
 class MainActivity : ComponentActivity() {
-    companion object{
-        private const val PREFS_NAME = "virtual_camera_x_prefs"
-    }
+
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        val prefs = try {
-            getSharedPreferences(PREFS_NAME, Context.MODE_WORLD_READABLE)
-        } catch (e: SecurityException) {
-            null
-        }
+        val prefs = getSharedPreferences("camera_magic_config", MODE_PRIVATE)
+
         enableEdgeToEdge()
         setContent {
+            val repository = remember { ConfigRepository(prefs) }
+            val factory = remember { ViewModelFactory(application, repository) }
             VirtualCameraXTheme(dynamicColor = true) {
-                CompositionLocalProvider(LocalPrefs provides prefs) {
+                CompositionLocalProvider(LocalViewModelFactory provides factory) {
                     val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         listOf(
-                            android.Manifest.permission.READ_MEDIA_IMAGES,
-                            android.Manifest.permission.READ_MEDIA_VIDEO
+                            Manifest.permission.READ_MEDIA_IMAGES,
+                            Manifest.permission.READ_MEDIA_VIDEO
                         )
                     } else {
-                        listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                        listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
                     }
 
                     // 2. 创建并记住权限状态
@@ -68,7 +67,6 @@ class MainActivity : ComponentActivity() {
                                 onGrantPermissionClick = { permissionState.launchMultiplePermissionRequest() }
                             )
                         }
-
                     }
                 }
             }
