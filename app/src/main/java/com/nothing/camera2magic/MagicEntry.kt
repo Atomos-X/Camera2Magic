@@ -43,7 +43,7 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
             @JvmStatic
             fun after(callback: AfterHookCallback) {
                 val activity = callback.thisObject as Activity
-                MagicNative.updateVideoSource()
+                MagicNative.dispatchMediaSourceToNative()
                 FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
             }
         }

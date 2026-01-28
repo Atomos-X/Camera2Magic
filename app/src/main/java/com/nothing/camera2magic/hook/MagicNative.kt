@@ -15,12 +15,19 @@ import java.lang.ref.WeakReference
 
 object MagicNative {
     private const val TAG = "[NATIVE]"
-    private const val KEY_VIDEO_ID = "local_video_id"
+
+    private const val LOCAL_MEDIA_TYPE_VIDEO = 0x0000
+    private const val LOCAL_MEDIA_TYPE_IMAGE = 0x0001
+    private const val NETWORK_MEDIA_TYPE_RTSP = 0x0101
     private const val KEY_MODULE_ENABLED = "main_module_enabled"
     private const val KEY_PLAY_SOUND = "main_play_sound"
     private const val KEY_ENABLE_LOG = "main_enable_log"
     private const val KEY_INJECT_MENU = "main_inject_menu"
     private const val KEY_MANUALLY_ROTATE = "main_manually_rotate"
+    private const val KEY_MEDIA_SOURCE = "media_source" // 0: local, 1: network
+    private const val KEY_LOCAL_MEDIA_TYPE = "local_media_type" // 0: video, 1: image
+    private const val KEY_LOCAL_VIDEO_ID = "local_video_id"
+    private const val KEY_LOCAL_IMAGE_ID = "local_image_id"
 
     private lateinit var prefs: SharedPreferences
 
@@ -38,13 +45,9 @@ object MagicNative {
     var currentCamera1: Camera? = null
     var previewCallback: ((data: ByteArray, width: Int, height: Int) -> Unit)? = null
     @Volatile
-    private var videoID: Long = -1L
+    private var moduleEnabled: Boolean = true
     @Volatile
-    var moduleEnabled: Boolean = true
-        private set
-    @Volatile
-    var playSound: Boolean = false
-        private set
+    private var playSound: Boolean = false
     @Volatile
     var enableLog: Boolean = false
         private set
@@ -52,10 +55,20 @@ object MagicNative {
     var injectMenuEnabled: Boolean = false
         private set
     @Volatile
-    var manuallyRotate: Boolean = false
-        private set
+    private var manuallyRotate: Boolean = false
     @Volatile
-    var videoSourceIsReady: Boolean = false
+    private var mediaSource: Int = 0
+    @Volatile
+    private var mediaType: Int = 0
+
+    @Volatile
+    private var selectedMedia: Int = 0x0000
+    @Volatile
+    private var videoId: Long = -1L
+    @Volatile
+    private var imageId: Long = -1L
+    @Volatile
+    var mediaIsReady: Boolean = false
         private set
     @Volatile
     var hasValidFrame = false
@@ -121,7 +134,7 @@ object MagicNative {
     external fun nv21ToJpegByteArray(nv21: ByteArray, width: Int, height: Int, quality: Int = 90): ByteArray?
 
     fun isReadyForHook(): Boolean {
-        return moduleEnabled && videoSourceIsReady
+        return moduleEnabled && mediaIsReady
     }
 
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
@@ -146,46 +159,59 @@ object MagicNative {
     fun refreshPrefs() {
         try {
             if (!::prefs.isInitialized) return
-            videoID = prefs.getLong(KEY_VIDEO_ID, -1L)
             moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
             playSound = prefs.getBoolean(KEY_PLAY_SOUND, false)
             enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false)
             injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
             manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
+            mediaSource = prefs.getInt(KEY_MEDIA_SOURCE, 0)
+            mediaType = prefs.getInt(KEY_LOCAL_MEDIA_TYPE, 0)
+            videoId = prefs.getLong(KEY_LOCAL_VIDEO_ID, -1L)
+            imageId = prefs.getLong(KEY_LOCAL_IMAGE_ID, -1L)
+
+            selectedMedia = (mediaSource shl 8) or mediaType
+
             updateNativeConfig(playSound, enableLog, manuallyRotate)
         } catch (e: Exception) { /* Do Nothing */ }
     }
 
-    fun updateVideoSource() {
-        val context = GlobalState.appContext ?: return
+    fun dispatchMediaSourceToNative() {
+        when (selectedMedia) {
+            LOCAL_MEDIA_TYPE_VIDEO -> { updateVideoSource() }
+            LOCAL_MEDIA_TYPE_IMAGE -> { }
+            NETWORK_MEDIA_TYPE_RTSP -> { }
+        }
+    }
 
-        val oldVideoId = videoID
+    private fun updateVideoSource() {
+        val context = GlobalState.appContext ?: return
+        val oldVideoId = videoId
         refreshPrefs()
-        val newVideoId = videoID
+        val newVideoId = videoId
 
         if (newVideoId == -1L) {
             if ( oldVideoId != -1L) resetVideoSource()
-            videoSourceIsReady = false
+            mediaIsReady = false
             return
         }
-        val shouldProcess = (newVideoId != oldVideoId) || !videoSourceIsReady
+        val shouldProcess = (newVideoId != oldVideoId) || !mediaIsReady
         if (!shouldProcess) return
 
         val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, newVideoId)
         try {
             context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                videoSourceIsReady = processVideo(
+                mediaIsReady = processVideo(
                     afd.parcelFileDescriptor.fd,
                     afd.startOffset,
                     afd.length
                 )
             }
         } catch (_: SecurityException) {
-            videoSourceIsReady = false
+            mediaIsReady = false
         } catch (e: Exception) {
-            prefs.edit().remove(KEY_VIDEO_ID).apply()
+            prefs.edit().remove(KEY_LOCAL_VIDEO_ID).apply()
             resetVideoSource()
-            videoSourceIsReady = false
+            mediaIsReady = false
         }
     }
 

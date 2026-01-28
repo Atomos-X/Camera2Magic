@@ -1,6 +1,5 @@
 package com.nothing.camera2magic.viewmodel
-import android.util.Log
-import android.webkit.ConsoleMessage
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
