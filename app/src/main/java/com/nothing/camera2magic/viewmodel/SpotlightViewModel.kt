@@ -15,20 +15,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.lang.Exception
 
-enum class MediaType(val value: Int, val mimeType: String) {
-    VIDEO(0, "video/*"),
-    IMAGE(1, "image/*"),
-    UNKNOWN(-1, "unknown");
-    companion object {
-        fun fromValue(value: Int): MediaType {
-            return entries.find { it.value == value } ?: UNKNOWN
-        }
-    }
-}
-
 data class SpotlightUiState(
     val moduleEnabled: Boolean = true,
-    val currentType: MediaType = MediaType.VIDEO
+    val selectedMediaSource: MediaSource = MediaSource.LOCAL,
+    val currentType: MediaType = MediaType.VIDEO,
 )
 
 class SpotlightViewModel(
@@ -54,6 +44,21 @@ class SpotlightViewModel(
             currentState.copy(moduleEnabled = newState)
         }
     }
+    fun selectedMediaSourceFrom(value: Int) {
+        val source = MediaSource.fromValue(value)
+        _uiState.update { currentState ->
+            repository.mediaSource = value
+            currentState.copy(selectedMediaSource = source)
+        }
+    }
+
+    fun setCurrentMediaType(type: MediaType) {
+        _uiState.update { currentState ->
+            repository.localMediaType = type.value
+            currentState.copy(currentType = type)
+        }
+    }
+
     fun onMediaSelected(type: MediaType, uri: Uri?) {
         if (uri == null) return
         val mediaId = try {
@@ -64,16 +69,15 @@ class SpotlightViewModel(
             loadAndVerifyMedia(type, mediaId)
         }
     }
-    fun clearMedia(type: MediaType) {
+    fun clearMediaBy(type: MediaType) {
         when (type) {
             MediaType.VIDEO -> repository.videoId = -1L
             MediaType.IMAGE -> repository.imageId = -1L
-            MediaType.UNKNOWN -> {}
         }
         updateThumbnailState(type, null)
     }
     fun performHealthCheckAndRefresh() {
-        MediaType.entries.filter { it != MediaType.UNKNOWN }.forEach { type ->
+        MediaType.entries.forEach { type ->
             loadAndVerifyMedia(type)
         }
     }
@@ -82,14 +86,14 @@ class SpotlightViewModel(
         when (type) {
             MediaType.VIDEO -> repository.videoId = id
             MediaType.IMAGE -> repository.imageId = id
-            MediaType.UNKNOWN -> {}
         }
     }
     private fun loadInitialSettings() {
         _uiState.update {
             it.copy(
                 moduleEnabled = repository.moduleEnabled,
-                currentType = MediaType.fromValue(repository.mediaType)
+                selectedMediaSource = MediaSource.fromValue(repository.mediaSource),
+                currentType = MediaType.fromValue(repository.localMediaType)
             )
         }
     }
@@ -97,7 +101,6 @@ class SpotlightViewModel(
         return when (type) {
             MediaType.VIDEO -> repository.videoId
             MediaType.IMAGE -> repository.imageId
-            MediaType.UNKNOWN -> -1L
         }
     }
     private fun loadAndVerifyMedia(type: MediaType, mediaIdOverride: Long? = null) {
@@ -115,7 +118,6 @@ class SpotlightViewModel(
                 val contentUri = when (type) {
                     MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                     MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                    else -> return@launch
                 }
 
                 val uri = ContentUris.withAppendedId(contentUri, mediaId)
@@ -136,10 +138,9 @@ class SpotlightViewModel(
             }
         }
     }
-    private fun updateThumbnailState(mediaType: MediaType, thumbnail: Bitmap?) {
-        if (mediaType == MediaType.UNKNOWN) return
+    private fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
         _thumbnails.update { currentMap ->
-            currentMap + (mediaType to thumbnail)
+            currentMap + (type to thumbnail)
         }
     }
 }

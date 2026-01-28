@@ -6,9 +6,13 @@
     <string name="permission_rationale_description">To load your selected videos and images for the virtual camera, the app needs permission to access media files on your device.</string>
     <string name="grant_permission_button_name">Grant Permission</string>
     <!--spotlight-->
-    <string-array name="media_types">
+    <string-array name="media_source">
+        <item>Local</item>
+        <item>Network</item>
+    </string-array>
+    <string-array name="local_media_type">
         <item>Video</item>
-        <item>rtsp://</item>
+        <item>Image</item>
     </string-array>
     <string name="module_switch_name">Enable Module</string>
     <!--settings-->
