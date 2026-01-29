@@ -34,16 +34,6 @@ object Camera2Hooker {
         }
     }
 
-    private fun getSensorOrientation(context: Context, cameraId: String): Int {
-        return try {
-            val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val characteristics = manager.getCameraCharacteristics(cameraId)
-            characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
-        } catch (e: Throwable) {
-            90 // 默认值
-        }
-    }
-
     @Suppress("DEPRECATION")
     private fun getDisplayOrientation(context: Context): Int {
         return try {
@@ -149,7 +139,7 @@ object Camera2Hooker {
                 state.apiLevel = 2
                 state.cameraId = cameraId
                 state.sensorOrientation = sensorOrientation
-                state.isfontCamera = frontCamera
+                state.isFrontCamera = frontCamera
                 state.packageName = GlobalState.packageName ?: "UNKNOWN"
             }
         }
@@ -172,15 +162,11 @@ object Camera2Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
+                val context = GlobalState.appContext ?: return
                 if (!MagicNative.isReadyForHook()) return
                 val camera = callback.thisObject as CameraDevice
                 val state = getCameraState(camera)
-                val context = GlobalState.appContext
-                if (context != null) {
-                    state.displayOrientation = getDisplayOrientation(context)
-                    state.sensorOrientation = getSensorOrientation(context, camera.id)
-                }
-
+                state.displayOrientation = getDisplayOrientation(context)
                 val surfaces = getSurfaceListFrom(callback.args[0])
                 val targetSurface = getTargetFrom(surfaces)
 

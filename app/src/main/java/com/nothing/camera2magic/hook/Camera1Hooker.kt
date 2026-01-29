@@ -104,7 +104,7 @@ object Camera1Hooker {
 
                 state.apiLevel = 1
                 state.cameraId = cameraId
-                state.isfontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+                state.isFrontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
                 state.packageName = GlobalState.packageName ?: "UNKNOWN"
             }
         }

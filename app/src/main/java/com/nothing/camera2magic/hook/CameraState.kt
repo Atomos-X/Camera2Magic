@@ -14,7 +14,7 @@ import android.view.Surface
 data class CameraState(
     var apiLevel: Int = 0,
     var cameraId: Int = 0,
-    var isfontCamera: Boolean = false,
+    var isFrontCamera: Boolean = false,
     var sensorOrientation: Int = 90,
     var pictureWidth: Int = 1920,
     var pictureHeight: Int = 1080,

@@ -142,7 +142,7 @@ object MagicNative {
             val lastSurface = lastRegisteredSurface?.get()
             state.surface?.let { surface ->
                 if (forceRefresh || surface != lastSurface) {
-                    registerSurface(state.apiLevel, state.cameraId, state.isfontCamera,
+                    registerSurface(state.apiLevel, state.cameraId, state.isFrontCamera,
                         state.sensorOrientation, state.pictureWidth, state.pictureHeight,
                         state.packageName, state.displayOrientation,surface)
                     lastRegisteredSurface = WeakReference(surface)
@@ -209,8 +209,7 @@ object MagicNative {
             }
         } catch (_: SecurityException) {
             mediaIsReady = false
-        } catch (e: Exception) {
-            prefs.edit().remove(KEY_LOCAL_VIDEO_ID).apply()
+        } catch (_: Exception) {
             resetVideoSource()
             mediaIsReady = false
         }
