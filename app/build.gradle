@@ -132,26 +132,28 @@ afterEvaluate {
 android.applicationVariants.all { variant ->
 
     def variantName = variant.name.capitalize() // "Debug" 或 "Release"
+    def copyTaskName = "buildNative${variantName}"
+    def stripTaskName = "strip${variantName}DebugSymbols"
+    def packageTaskName = "package${variantName}"
 
     tasks.register("buildNative${variantName}", Copy) {
 
         doFirst {
-            delete "src/main/jniLibs/"
-            delete "release/"
-            delete ".cxx"
+            delete("src/main/jniLibs/**/*.so")
+            delete("release/")
+            delete(".cxx")
             println ">>> 已清理手动生成的 jniLibs 目录 <<<"
         }
 
         group = "native"
         description = "为 ${variant.name} 编译并同步 C++ 产物"
         // 动态匹配当前变体的路径
-        def stripTask = "strip${variantName}DebugSymbols"
         println ">>> 模式: Native 构建 (正在编译 C++ 并更新 jniLibs) <<<"
-        dependsOn stripTask
+        dependsOn stripTaskName
         outputs.upToDateWhen { false }
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
-        def startDir = layout.buildDirectory.dir("intermediates/stripped_native_libs/${variant.name}/${stripTask}/out/lib")
+        def startDir = layout.buildDirectory.dir("intermediates/stripped_native_libs/${variant.name}/${stripTaskName}/out/lib")
 
         from(startDir) {
             include("**/libcamera_magic.so")

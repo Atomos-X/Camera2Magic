@@ -185,7 +185,7 @@ object MagicNative {
     }
 
     private fun updateVideoSource() {
-        val context = GlobalState.appContext ?: return
+        val context = GlobalState.appContext
         val oldVideoId = videoId
         refreshPrefs()
         val newVideoId = videoId

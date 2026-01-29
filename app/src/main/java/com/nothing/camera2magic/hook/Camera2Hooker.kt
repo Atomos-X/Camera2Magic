@@ -1,14 +1,13 @@
 package com.nothing.camera2magic.hook
 
+import android.annotation.SuppressLint
 import android.content.Context
-import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.view.Surface
-import android.os.Handler
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicEntry
@@ -19,6 +18,7 @@ import com.nothing.camera2magic.hook.MagicNative.releaseLastRegisteredSurface
 import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
+import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
@@ -32,13 +32,6 @@ object Camera2Hooker {
         return synchronized(cameraState) {
             cameraState.getOrPut(camera) { CameraState() }
         }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun getDisplayOrientation(context: Context): Int {
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val rotation = windowManager.defaultDisplay.rotation
-        return rotation * 90
     }
 
     private fun getSurfaceListFrom(obj: Any?): List<Surface> {
@@ -86,40 +79,34 @@ object Camera2Hooker {
         return targetSurface
     }
 
+    @SuppressLint("PrivateApi")
     fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
         val classLoader = param.classLoader
         val cameraDeviceImplClass = classLoader.loadClass("android.hardware.camera2.impl.CameraDeviceImpl")
+        val constructors = cameraDeviceImplClass.declaredConstructors
+        constructors.forEach { method ->
+            module.hook(method, CameraOpen::class.java)
+        }
 
-        val open = cameraDeviceImplClass.getDeclaredMethod("open", CameraDevice.StateCallback::class.java, Handler::class.java)
-        module.hook(open, CameraOpen::class.java)
+        val closeMethod = cameraDeviceImplClass.getDeclaredMethod("close")
+        module.hook(closeMethod, CameraClose::class.java)
 
-        val close = cameraDeviceImplClass.getDeclaredMethod("close")
-        module.hook(close, CameraClose::class.java)
-
-        val createCaptureSessionWithLegacyApi = cameraDeviceImplClass.getDeclaredMethod(
-            "createCaptureSession",
-            List::class.java,
-            CameraCaptureSession.StateCallback::class.java,
-            Handler::class.java)
-
-        module.hook(createCaptureSessionWithLegacyApi, CameraCreateCaptureSession::class.java)
-
-
-        val createCaptureSessionWithModernApi = cameraDeviceImplClass.getDeclaredMethod(
-            "createCaptureSession",
-            SessionConfiguration::class.java)
-
-        module.hook(createCaptureSessionWithModernApi, CameraCreateCaptureSession::class.java)
+        val createCaptureSessionMethods = cameraDeviceImplClass.declaredMethods.filter {
+            it.name == "createCaptureSession"
+        }
+        createCaptureSessionMethods.forEach { method ->
+            module.hook(method, CameraCreateCaptureSession::class.java)
+        }
     }
 
     class CameraOpen : XposedInterface.Hooker {
         companion object {
             @JvmStatic
-            fun after(callback: BeforeHookCallback) {
+            fun after(callback: AfterHookCallback) {
                 val context = GlobalState.appContext
                 val camera = callback.thisObject as CameraDevice
                 activeCameraRef = WeakReference(camera)
-                val cameraIdStr = camera.id
+                val cameraIdStr = callback.args[0] as String
                 val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 val characteristics = manager.getCameraCharacteristics(cameraIdStr)
                 val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
@@ -137,7 +124,7 @@ object Camera2Hooker {
     class CameraClose : XposedInterface.Hooker {
         companion object {
             @JvmStatic
-            fun before(callback: BeforeHookCallback) {
+            fun after(callback: AfterHookCallback) {
                 val closingCamera = callback.thisObject as CameraDevice
                 val activeCamera = activeCameraRef?.get()
                 if (activeCamera != null && closingCamera === activeCamera) {
