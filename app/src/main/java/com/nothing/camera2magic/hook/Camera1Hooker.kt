@@ -44,11 +44,11 @@ object Camera1Hooker {
         val classLoader = param.classLoader
         val cameraClass = classLoader.loadClass("android.hardware.Camera")
 
-        val openNoParamMethod = cameraClass.getDeclaredMethod("open")
-        module.hook(openNoParamMethod, CameraOpen::class.java)
+        val openNoArgMethod = cameraClass.getDeclaredMethod("open")
+        module.hook(openNoArgMethod, CameraOpen::class.java)
 
-        val openWithParamMethod = cameraClass.getDeclaredMethod("open", Int::class.javaPrimitiveType)
-        module.hook(openWithParamMethod, CameraOpen::class.java)
+        val openWithArgMethod = cameraClass.getDeclaredMethod("open", Int::class.javaPrimitiveType)
+        module.hook(openWithArgMethod, CameraOpen::class.java)
 
         val setParametersMethod = cameraClass.getDeclaredMethod("setParameters", Camera.Parameters::class.java)
         module.hook(setParametersMethod, CameraSetParameters::class.java)
@@ -94,12 +94,18 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun after(callback: AfterHookCallback) {
-                val camera = callback.result as? Camera ?: return
+                val camera = callback.result as Camera
                 activeCameraRef = WeakReference(camera)
+                val cameraId = callback.args.getOrNull(0) as? Int ?: 0
+                val info = Camera.CameraInfo()
+                Camera.getCameraInfo(cameraId, info)
+
                 val state = getCameraState(camera)
+
                 state.apiLevel = 1
+                state.cameraId = cameraId
+                state.isfontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
                 state.packageName = GlobalState.packageName ?: "UNKNOWN"
-                if (callback.args.isNotEmpty()) state.cameraId = (callback.args[0] as Int).toString()
             }
         }
     }

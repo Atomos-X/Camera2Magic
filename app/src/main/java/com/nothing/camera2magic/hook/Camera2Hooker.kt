@@ -43,6 +43,7 @@ object Camera2Hooker {
             90 // 默认值
         }
     }
+
     @Suppress("DEPRECATION")
     private fun getDisplayOrientation(context: Context): Int {
         return try {
@@ -109,6 +110,9 @@ object Camera2Hooker {
         val classLoader = param.classLoader
         val cameraDeviceImplClass = classLoader.loadClass("android.hardware.camera2.impl.CameraDeviceImpl")
 
+        val open = cameraDeviceImplClass.getDeclaredMethod("open", CameraDevice.StateCallback::class.java, Handler::class.java)
+        module.hook(open, CameraOpen::class.java)
+
         val close = cameraDeviceImplClass.getDeclaredMethod("close")
         module.hook(close, CameraClose::class.java)
 
@@ -128,6 +132,28 @@ object Camera2Hooker {
         module.hook(createCaptureSessionWithModernApi, CameraCreateCaptureSession::class.java)
     }
 
+    class CameraOpen : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun after(callback: BeforeHookCallback) {
+                val context = GlobalState.appContext ?: return
+                val camera = callback.thisObject as CameraDevice
+                activeCameraRef = WeakReference(camera)
+                val cameraId = camera.id.toIntOrNull() ?: 0
+                val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                val characteristics = manager.getCameraCharacteristics(cameraId.toString())
+                val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+                val frontCamera = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+
+                val state = getCameraState(camera)
+                state.apiLevel = 2
+                state.cameraId = cameraId
+                state.sensorOrientation = sensorOrientation
+                state.isfontCamera = frontCamera
+                state.packageName = GlobalState.packageName ?: "UNKNOWN"
+            }
+        }
+    }
     class CameraClose : XposedInterface.Hooker {
         companion object {
             @JvmStatic
@@ -148,12 +174,7 @@ object Camera2Hooker {
             fun before(callback: BeforeHookCallback) {
                 if (!MagicNative.isReadyForHook()) return
                 val camera = callback.thisObject as CameraDevice
-                activeCameraRef = WeakReference(camera)
-
                 val state = getCameraState(camera)
-                state.apiLevel = 2
-                state.cameraId = camera.id
-                state.packageName = GlobalState.packageName ?: "UNKNOWN"
                 val context = GlobalState.appContext
                 if (context != null) {
                     state.displayOrientation = getDisplayOrientation(context)

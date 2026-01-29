@@ -116,7 +116,7 @@ object MagicNative {
     @JvmStatic
     external fun updateNativeConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
-    external fun registerSurface(apiLevel: Int, cameraId: String, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
+    external fun registerSurface(apiLevel: Int, cameraId: Int, isFrontCamera: Boolean, sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
                                  packageName: String, displayOrientation: Int, surface: Surface)
     @JvmStatic
     external fun setDisplayOrientation(orientation: Int)
@@ -140,11 +140,12 @@ object MagicNative {
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
-            state.surface?.let {
-                if (forceRefresh || it != lastSurface) {
-                    registerSurface(state.apiLevel, state.cameraId, state.sensorOrientation, state.pictureWidth, state.pictureHeight,
-                        state.packageName, state.displayOrientation,it)
-                    lastRegisteredSurface = WeakReference(it)
+            state.surface?.let { surface ->
+                if (forceRefresh || surface != lastSurface) {
+                    registerSurface(state.apiLevel, state.cameraId, state.isfontCamera,
+                        state.sensorOrientation, state.pictureWidth, state.pictureHeight,
+                        state.packageName, state.displayOrientation,surface)
+                    lastRegisteredSurface = WeakReference(surface)
                 }
             }
         }
