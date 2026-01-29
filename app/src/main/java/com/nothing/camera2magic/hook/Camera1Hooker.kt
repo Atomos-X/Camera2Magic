@@ -44,11 +44,10 @@ object Camera1Hooker {
         val classLoader = param.classLoader
         val cameraClass = classLoader.loadClass("android.hardware.Camera")
 
-        val openNoArgMethod = cameraClass.getDeclaredMethod("open")
-        module.hook(openNoArgMethod, CameraOpen::class.java)
-
-        val openWithArgMethod = cameraClass.getDeclaredMethod("open", Int::class.javaPrimitiveType)
-        module.hook(openWithArgMethod, CameraOpen::class.java)
+        val openMethods = cameraClass.declaredMethods.filter { it.name == "open" }
+        openMethods.forEach { method ->
+            module.hook(method, CameraOpen::class.java)
+        }
 
         val setParametersMethod = cameraClass.getDeclaredMethod("setParameters", Camera.Parameters::class.java)
         module.hook(setParametersMethod, CameraSetParameters::class.java)
@@ -72,8 +71,8 @@ object Camera1Hooker {
         val releaseMethod = cameraClass.getDeclaredMethod("release")
         module.hook(releaseMethod, CameraRelease::class.java)
 
-        val previewCallbackMethod = cameraClass.getDeclaredMethod("setPreviewCallback", Camera.PreviewCallback::class.java)
-        module.hook(previewCallbackMethod, CameraSetPreviewCallback::class.java)
+        val setPreviewCallbackMethod = cameraClass.getDeclaredMethod("setPreviewCallback", Camera.PreviewCallback::class.java)
+        module.hook(setPreviewCallbackMethod, CameraSetPreviewCallback::class.java)
 
         val setPreviewCallbackWithBufferMethod = cameraClass.getDeclaredMethod("setPreviewCallbackWithBuffer", Camera.PreviewCallback::class.java)
         module.hook(setPreviewCallbackWithBufferMethod, CameraSetPreviewCallback::class.java)
@@ -105,6 +104,7 @@ object Camera1Hooker {
                 state.apiLevel = 1
                 state.cameraId = cameraId
                 state.isFrontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+                state.sensorOrientation = info.orientation
                 state.packageName = GlobalState.packageName ?: "UNKNOWN"
             }
         }
@@ -138,13 +138,6 @@ object Camera1Hooker {
                 val camera = callback.thisObject as Camera
                 val st = callback.args[0] as SurfaceTexture
                 surfaceCache[camera] = st
-                /**
-                 * @brief 对于 bilibili 的特殊处理
-                 * SurfaceTexture bufferSize = (1,1) -> ANativeWindow bufferSize
-                 * dirty fix: SurfaceTexture bufferSize = (1920,1080) -> ANativeWindow bufferSize
-                 */
-                val state = getCameraState(camera)
-                if (GlobalState.packageName == BILIBILI) st.setDefaultBufferSize(state.previewWidth, state.previewHeight)
             }
         }
     }
@@ -183,9 +176,6 @@ object Camera1Hooker {
                 val state = getCameraState(camera)
 
                 state.surface = getSurfaceFrom(surfaceCache[camera]) ?: return
-                val info = Camera.CameraInfo()
-                Camera.getCameraInfo(state.cameraId.toInt(), info)
-                state.sensorOrientation = info.orientation
                 val activeCamera = activeCameraRef?.get()
 
                 if (activeCamera != null && camera === activeCamera) {
