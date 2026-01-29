@@ -18,7 +18,7 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
 object GlobalState {
     @Volatile
-    var appContext: Context? = null
+    lateinit var appContext: Context
     @Volatile
     var packageName: String? = null
 }

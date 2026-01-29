@@ -36,19 +36,9 @@ object Camera2Hooker {
 
     @Suppress("DEPRECATION")
     private fun getDisplayOrientation(context: Context): Int {
-        return try {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val rotation = windowManager.defaultDisplay.rotation
-            when (rotation) {
-                Surface.ROTATION_0 -> 0
-                Surface.ROTATION_90 -> 90
-                Surface.ROTATION_180 -> 180
-                Surface.ROTATION_270 -> 270
-                else -> 0
-            }
-        } catch (e: Throwable) {
-            0
-        }
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val rotation = windowManager.defaultDisplay.rotation
+        return rotation * 90
     }
 
     private fun getSurfaceListFrom(obj: Any?): List<Surface> {
@@ -126,18 +116,18 @@ object Camera2Hooker {
         companion object {
             @JvmStatic
             fun after(callback: BeforeHookCallback) {
-                val context = GlobalState.appContext ?: return
+                val context = GlobalState.appContext
                 val camera = callback.thisObject as CameraDevice
                 activeCameraRef = WeakReference(camera)
-                val cameraId = camera.id.toIntOrNull() ?: 0
+                val cameraIdStr = camera.id
                 val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-                val characteristics = manager.getCameraCharacteristics(cameraId.toString())
+                val characteristics = manager.getCameraCharacteristics(cameraIdStr)
                 val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
                 val frontCamera = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
 
                 val state = getCameraState(camera)
                 state.apiLevel = 2
-                state.cameraId = cameraId
+                state.cameraId = cameraIdStr.toInt()
                 state.sensorOrientation = sensorOrientation
                 state.isFrontCamera = frontCamera
                 state.packageName = GlobalState.packageName ?: "UNKNOWN"
@@ -162,11 +152,18 @@ object Camera2Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                val context = GlobalState.appContext ?: return
                 if (!MagicNative.isReadyForHook()) return
+
+                val context = GlobalState.appContext
                 val camera = callback.thisObject as CameraDevice
+                val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+
+                @Suppress("DEPRECATION")
+                val rotation = windowManager.defaultDisplay.rotation
+
                 val state = getCameraState(camera)
-                state.displayOrientation = getDisplayOrientation(context)
+                state.displayOrientation = rotation * 90
+
                 val surfaces = getSurfaceListFrom(callback.args[0])
                 val targetSurface = getTargetFrom(surfaces)
 
