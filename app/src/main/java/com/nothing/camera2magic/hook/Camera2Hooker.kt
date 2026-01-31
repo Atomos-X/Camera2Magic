@@ -11,10 +11,10 @@ import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicEntry
-import com.nothing.camera2magic.hook.MagicNative.needStartRenderer
-import com.nothing.camera2magic.hook.MagicNative.needStopRenderer
-import com.nothing.camera2magic.hook.MagicNative.registerSurfaceIfNew
-import com.nothing.camera2magic.hook.MagicNative.releaseLastRegisteredSurface
+import com.nothing.camera2magic.hook.NativeBridge.needStartRenderer
+import com.nothing.camera2magic.hook.NativeBridge.needStopRenderer
+import com.nothing.camera2magic.hook.NativeBridge.registerSurfaceIfNew
+import com.nothing.camera2magic.hook.NativeBridge.releaseLastRegisteredSurface
 import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
@@ -56,23 +56,23 @@ object Camera2Hooker {
 
         // 步骤 A: 找 Format 34 (IMPLEMENTATION_DEFINED)
         val previewCandidates = validSurfaces.filter {
-            val fmt = MagicNative.getSurfaceInfo(it)[2]
+            val fmt = NativeBridge.getSurfaceInfo(it)[2]
             fmt == 34 // 0x22
         }
 
         if (previewCandidates.isNotEmpty()) {
             // 选面积最大的
             targetSurface = previewCandidates.maxByOrNull {
-                val info = MagicNative.getSurfaceInfo(it)
+                val info = NativeBridge.getSurfaceInfo(it)
                 info[0] * info[1]
             }
         }
 
         // 步骤 B: 没找到 34？那就降级找 Format 1
         if (targetSurface == null) {
-            Dog.i(TAG, "No Format-34 surface found! Fallback to Format-1", MagicNative.enableLog)
+            Dog.i(TAG, "No Format-34 surface found! Fallback to Format-1", SourceManager.enableLog)
             targetSurface = validSurfaces.firstOrNull {
-                val fmt = MagicNative.getSurfaceInfo(it)[2]
+                val fmt = NativeBridge.getSurfaceInfo(it)[2]
                 fmt == 1
             }
         }
@@ -106,18 +106,16 @@ object Camera2Hooker {
                 val context = GlobalState.appContext
                 val camera = callback.thisObject as CameraDevice
                 activeCameraRef = WeakReference(camera)
+
                 val cameraIdStr = callback.args[0] as String
                 val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 val characteristics = manager.getCameraCharacteristics(cameraIdStr)
-                val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
-                val frontCamera = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
 
                 val state = getCameraState(camera)
                 state.apiLevel = 2
-                state.cameraId = cameraIdStr.toInt()
-                state.sensorOrientation = sensorOrientation
-                state.isFrontCamera = frontCamera
-                state.packageName = GlobalState.packageName ?: "UNKNOWN"
+                state.sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+                state.facingFront = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                state.packageName = GlobalState.packageName
             }
         }
     }
@@ -139,7 +137,7 @@ object Camera2Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
 
                 val context = GlobalState.appContext
                 val camera = callback.thisObject as CameraDevice
@@ -155,7 +153,7 @@ object Camera2Hooker {
                 val targetSurface = getTargetFrom(surfaces)
 
                 targetSurface?.let { surface ->
-                    val info = MagicNative.getSurfaceInfo(surface)
+                    val info = NativeBridge.getSurfaceInfo(surface)
                     state.pictureWidth = info[0]
                     state.pictureHeight = info[1]
                     state.surface = surface

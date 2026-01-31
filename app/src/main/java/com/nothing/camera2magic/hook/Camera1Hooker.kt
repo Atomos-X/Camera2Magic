@@ -18,15 +18,12 @@ import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 object Camera1Hooker {
     private const val TAG = "[CAM1]"
-    private const val BILIBILI = "tv.danmaku.bili"
     private var activeCameraRef: WeakReference<Any>? = null
     private var cameraState = WeakHashMap<Camera, CameraState>()
     private val surfaceCache = WeakHashMap<Camera, Any>()
     private fun getCameraState(camera: Camera): CameraState {
         return synchronized(cameraState) {
-            cameraState.getOrPut(camera) {
-                CameraState()
-            }
+            cameraState.getOrPut(camera) { CameraState() }
         }
     }
     private fun isPreviewing(camera: Camera): Boolean {
@@ -82,11 +79,12 @@ object Camera1Hooker {
 
         val takePictureMethod = cameraClass.getDeclaredMethod("takePicture",
             Camera.ShutterCallback::class.java,
-            Camera.PictureCallback::class.java,
-            Camera.PictureCallback::class.java,
-            Camera.PictureCallback::class.java)
+            Camera.PictureCallback::class.java, // raw
+            Camera.PictureCallback::class.java, // post view
+            Camera.PictureCallback::class.java) // jpeg
 
         module.hook(takePictureMethod, CameraTakePicture::class.java)
+
     }
 
     class CameraOpen : XposedInterface.Hooker {
@@ -102,30 +100,26 @@ object Camera1Hooker {
                 val state = getCameraState(camera)
 
                 state.apiLevel = 1
-                state.cameraId = cameraId
-                state.isFrontCamera = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+                state.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
                 state.sensorOrientation = info.orientation
-                state.packageName = GlobalState.packageName ?: "UNKNOWN"
+                state.packageName = GlobalState.packageName
             }
         }
     }
+
     class CameraSetParameters: XposedInterface.Hooker {
         companion object {
             @JvmStatic
             fun after(callback: AfterHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
                 val params = callback.args[0] as Camera.Parameters
                 val pictureSize = params.pictureSize
-                val previewSize = params.previewSize
                 val state = getCameraState(camera)
+
                 if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
                     state.pictureWidth = pictureSize.width
                     state.pictureHeight = pictureSize.height
-                }
-                if (state.previewWidth != previewSize.width || state.previewHeight != previewSize.height) {
-                    state.previewWidth = previewSize.width
-                    state.previewHeight = previewSize.height
                 }
             }
         }
@@ -134,7 +128,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
                 val st = callback.args[0] as SurfaceTexture
                 surfaceCache[camera] = st
@@ -145,7 +139,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
                 val holder = callback.args[0] as SurfaceHolder
                 surfaceCache[camera] = holder.surface
@@ -156,13 +150,13 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
                 val state = getCameraState(camera)
                 val displayOrientation = callback.args[0] as Int
                 if (state.displayOrientation == displayOrientation) return
                 state.displayOrientation = displayOrientation
-                if (isPreviewing(camera)) MagicNative.setDisplayOrientation(displayOrientation)
+                if (isPreviewing(camera)) NativeBridge.setDisplayOrientation(displayOrientation)
             }
         }
     }
@@ -170,7 +164,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
 
                 val state = getCameraState(camera)
@@ -179,8 +173,8 @@ object Camera1Hooker {
                 val activeCamera = activeCameraRef?.get()
 
                 if (activeCamera != null && camera === activeCamera) {
-                    MagicNative.registerSurfaceIfNew(state, true)
-                    MagicNative.needStartRenderer()
+                    NativeBridge.registerSurfaceIfNew(state, true)
+                    NativeBridge.needStartRenderer()
                 }
                 callback.returnAndSkip(null)
             }
@@ -193,7 +187,7 @@ object Camera1Hooker {
                 val camera = callback.thisObject as Camera
                 val activeCamera = activeCameraRef?.get()
                 if (activeCamera != null && camera === activeCamera) {
-                    MagicNative.needStopRenderer()
+                    NativeBridge.needStopRenderer()
                 }
             }
         }
@@ -206,8 +200,8 @@ object Camera1Hooker {
                 val activeCamera = activeCameraRef?.get()
 
                 if (activeCamera != null && closingCamera === activeCamera) {
-                    MagicNative.needStopRenderer()
-                    MagicNative.releaseLastRegisteredSurface()
+                    NativeBridge.needStopRenderer()
+                    NativeBridge.releaseLastRegisteredSurface()
                     activeCameraRef = null
                 }
             }
@@ -217,9 +211,9 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
-                MagicNative.camera1Callback = callback.args[0] as? Camera.PreviewCallback
-                MagicNative.currentCamera1 = callback.thisObject as? Camera
+                if (!SourceManager.isReadyForHook()) return
+                NativeBridge.camera1Callback = callback.args[0] as? Camera.PreviewCallback
+                NativeBridge.currentCamera1 = callback.thisObject as? Camera
                 callback.returnAndSkip(null)
             }
         }
@@ -228,7 +222,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
+                if (!SourceManager.isReadyForHook()) return
                 callback.returnAndSkip(null)
             }
         }
@@ -237,23 +231,27 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
-                if (!MagicNative.isReadyForHook()) return
-                callback.returnAndSkip(null)
+                if (!SourceManager.isReadyForHook()) return
+
+                val shutter = callback.args[0] as? Camera.ShutterCallback
+                Handler(Looper.getMainLooper()).post { shutter?.onShutter() }
+
                 val camera = callback.thisObject as Camera
                 val jpegCallback = callback.args[3] as? Camera.PictureCallback
-                if (jpegCallback != null) {
-                    Thread {
-                        val snapshot = MagicNative.getFrameSnapshot()
-                        if (snapshot != null) {
-                            val (data, w, h) = snapshot
-                            val jpegData = MagicNative.nv21ToJpegByteArray(data, w, h) ?: return@Thread
-                            // 回主线程回调
-                            Handler(Looper.getMainLooper()).post {
-                                jpegCallback.onPictureTaken(jpegData, camera)
-                            }
-                        }
-                    }.start()
-                }
+                if (jpegCallback != null) processShotJPEG(jpegCallback, camera)
+
+                callback.returnAndSkip(null)
+            }
+
+            private fun processShotJPEG(cb: Camera.PictureCallback, camera:Camera) {
+                Thread {
+                    NativeBridge.getFrameSnapshot()?.let { snapshot ->
+                        val (data, w, h) = snapshot
+                        val jpegData = NativeBridge.nv21ToJpegByteArray(data, w, h)
+                        // 回主线程回调
+                        Handler(Looper.getMainLooper()).post { cb.onPictureTaken(jpegData, camera) }
+                    }
+                }.start()
             }
         }
     }

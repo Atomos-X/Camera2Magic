@@ -9,5 +9,6 @@ local.properties
 *.iml
 **/.cxx
 /app/src/main/cpp
+.clang-format
 !/app/src/main/jniLib
 .DS_Store

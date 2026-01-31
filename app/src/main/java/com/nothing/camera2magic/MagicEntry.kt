@@ -1,13 +1,12 @@
 package com.nothing.camera2magic
 
-
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
-import com.nothing.camera2magic.hook.MagicNative
+import com.nothing.camera2magic.hook.SourceManager
 import com.nothing.camera2magic.utils.FloatWindowManager
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
@@ -20,7 +19,7 @@ object GlobalState {
     @Volatile
     lateinit var appContext: Context
     @Volatile
-    var packageName: String? = null
+    lateinit var packageName: String
 }
 
 private const val TAG = "[Entry]"
@@ -43,8 +42,8 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
             @JvmStatic
             fun after(callback: AfterHookCallback) {
                 val activity = callback.thisObject as Activity
-                MagicNative.dispatchMediaSourceToNative()
-                FloatWindowManager.updateFloatWindowVisibility(activity, MagicNative.injectMenuEnabled)
+                SourceManager.refreshAndDispatch()
+                FloatWindowManager.updateFloatWindowVisibility(activity, SourceManager.injectMenuEnabled)
             }
         }
     }
@@ -56,7 +55,7 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
         GlobalState.packageName = param.packageName
 
         val remotePrefs = getRemotePreferences("camera_magic_config")
-        MagicNative.init(remotePrefs)
+        SourceManager.init(remotePrefs)
 
         val attachMethod = Application::class.java.getDeclaredMethod("attach", Context::class.java)
         hook(attachMethod, AttachHooker::class.java)

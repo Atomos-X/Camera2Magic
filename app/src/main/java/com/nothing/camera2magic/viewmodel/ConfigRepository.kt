@@ -87,7 +87,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to update remote preferences", e)
+                Log.e(TAG, "Failed to set_internal_state remote preferences", e)
             }
         }
     }
@@ -132,7 +132,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
     var mediaSource: Int
         get() = prefs.getInt("media_source", 0)
         set(value) {
-            if (value != MediaSource.LOCAL.value && value != MediaSource.NETWORK.value) {
+            if (value !in MediaSource.entries.map { it.value }) {
                 throw IllegalArgumentException("Invalid MediaSource value: $value")
             } else {
                 save("media_source", value)
@@ -142,7 +142,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
     var localMediaType: Int
         get() = prefs.getInt("local_media_type", 0)
         set(value) {
-            if (value != MediaType.VIDEO.value && value != MediaType.IMAGE.value) {
+            if (value !in MediaType.entries.map { it.value }) {
                 throw IllegalArgumentException("Invalid MediaType value: $value")
             } else {
                 save("local_media_type", value)
@@ -156,4 +156,8 @@ class ConfigRepository(private val prefs: SharedPreferences) {
     var imageId: Long
         get() = prefs.getLong("local_image_id", -1L)
         set(value) = save("local_image_id", value)
+
+    var rtspUri: String
+        get() = prefs.getString("network_rtsp_uri", "") ?: ""
+        set(value) = save("network_rtsp_uri", value)
 }
