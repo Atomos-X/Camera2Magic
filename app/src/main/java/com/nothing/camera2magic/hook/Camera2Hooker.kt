@@ -2,6 +2,7 @@ package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
@@ -70,7 +71,7 @@ object Camera2Hooker {
 
         // 步骤 B: 没找到 34？那就降级找 Format 1
         if (targetSurface == null) {
-            Dog.i(TAG, "No Format-34 surface found! Fallback to Format-1", SourceManager.enableLog)
+            Dog.w(TAG, "No Format-34 surface found! Fallback to Format-1", SourceManager.enableLog)
             targetSurface = validSurfaces.firstOrNull {
                 val fmt = NativeBridge.getSurfaceInfo(it)[2]
                 fmt == 1

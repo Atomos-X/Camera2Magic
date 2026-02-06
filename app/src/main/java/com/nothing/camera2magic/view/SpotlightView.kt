@@ -150,7 +150,8 @@ private fun MediaPreviewGrid(
                 )
                 RadioButtonRow(
                     selected = currentType == type,
-                    onClick = { onTypeSelected(type) }
+                    onClick = { onTypeSelected(type) },
+                    enabled = type != MediaType.IMAGE
                 )
             }
         }
@@ -255,14 +256,16 @@ private fun DeleteModeOverlay(visible: Boolean, onClear: () -> Unit) {
 }
 
 @Composable
-private fun RadioButtonRow(selected: Boolean, onClick: () -> Unit) {
+private fun RadioButtonRow(selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically) {
         RadioButton(
             selected = selected,
             onClick = onClick,
+            enabled = enabled,
             colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+
         )
     }
 }

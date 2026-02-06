@@ -53,7 +53,7 @@
     flowchart LR
         R0[Decoded RGBA Texture]
     
-        R0 -->|Frame N| R1[draw_frame_rgba<br/>Render Thread]
+        R0 -->|Frame N| R1[draw_frame<br/>Render Thread]
         R0 -->|Frame N-1| R2[GPU NV21 Transcode]
     
         R2 --> P0[TripleBuffered PBO]
@@ -73,7 +73,7 @@
         S0[Render Thread Loop]
         S0 --> S1[wait for new RGBA frame]
         S1 --> S2[bind EGLSurface]
-        S2 --> S3[draw_frame_rgba]
+        S2 --> S3[draw_frame]
         S3 --> S4[eglSwapBuffers]
         S4 --> S0
     ```

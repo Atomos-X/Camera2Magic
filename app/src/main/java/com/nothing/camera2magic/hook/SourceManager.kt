@@ -2,8 +2,14 @@ package com.nothing.camera2magic.hook
 
 import android.content.ContentUris
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.ColorSpace
+import android.graphics.ImageDecoder
 import android.provider.MediaStore
 import com.nothing.camera2magic.GlobalState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 object SourceManager {
     private const val LOCAL_MEDIA_TYPE_VIDEO = 0x0000
     private const val LOCAL_MEDIA_TYPE_IMAGE = 0x0001
@@ -84,7 +90,7 @@ object SourceManager {
             imageId = prefs.getLong(KEY_LOCAL_IMAGE_ID, -1L)
             rtspUri = prefs.getString(KEY_NETWORK_RTSP_URI, "") ?: ""
 
-            NativeBridge.updateGlobalConfig(selectedMedia, playSound, enableLog, manuallyRotate)
+            NativeBridge.updateGlobalConfig(playSound, enableLog, manuallyRotate)
 
         } catch (e: Exception) { /* Do Nothing */ }
     }
@@ -131,6 +137,16 @@ object SourceManager {
         } catch (_: Exception) {
             NativeBridge.resetVideoSource()
             mediaIsReady = false
+        }
+    }
+
+    private suspend fun loadStaticImageFrom(id: Long): Bitmap = withContext(Dispatchers.IO) {
+        val context = GlobalState.appContext
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+        val source = ImageDecoder.createSource(context.contentResolver, uri)
+        return@withContext ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
         }
     }
 }

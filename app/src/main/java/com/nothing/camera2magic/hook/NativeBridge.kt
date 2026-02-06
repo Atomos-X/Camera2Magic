@@ -2,6 +2,7 @@
 
 package com.nothing.camera2magic.hook
 
+import android.graphics.Bitmap
 import android.hardware.Camera
 import android.view.Surface
 import com.nothing.camera2magic.utils.Dog
@@ -58,7 +59,7 @@ object NativeBridge {
     }
 
     @JvmStatic
-    external fun updateGlobalConfig(selectedMedia: Int, playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
+    external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
     external fun registerSurface(packageName: String, apiLevel: Int, facingFront: Boolean,
                                  sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
@@ -71,6 +72,9 @@ object NativeBridge {
     external fun resetVideoSource()
     @JvmStatic
     external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
+
+    @JvmStatic
+    external fun processBitmap(bitmap: Bitmap): Boolean
     @JvmStatic
     external fun needStopRenderer()
     @JvmStatic
@@ -84,7 +88,7 @@ object NativeBridge {
                 if (forceRefresh || surface != lastSurface) {
                     registerSurface(state.packageName, state.apiLevel,state.facingFront,
                         state.sensorOrientation, state.pictureWidth, state.pictureHeight,
-                         state.displayOrientation,surface)
+                         state.displayOrientation, surface)
                     lastRegisteredSurface = WeakReference(surface)
                 }
             }
