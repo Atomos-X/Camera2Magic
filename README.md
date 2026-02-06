@@ -26,6 +26,7 @@
 ## 开发进度  
 
 ### 优化
+  - [x] 移除双缓冲，降低总线带宽占用(RGBA纹理)、和FBO切换的开销，经过长时间测试(sm8250 8g lpddr4, 4k@60fps hevc视频)，同时运行预览和nv21转码更稳定了  
   - [x] 删除未使用资源，减少安装包体积: 48M -> 8M  
   - [x] native端混沌代码重写为模块化  
   - [x] 改善 camera1 api 拍照性能，由native端直接生成jpeg ByteArray，不再使用java端生成照片 
