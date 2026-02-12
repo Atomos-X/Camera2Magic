@@ -7,10 +7,12 @@ import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.provider.MediaStore
 import com.nothing.camera2magic.GlobalState
+import com.nothing.camera2magic.utils.Dog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object SourceManager {
+    private const val TAG = "[MediaSource]"
     private const val LOCAL_MEDIA_TYPE_VIDEO = 0x0000
     private const val LOCAL_MEDIA_TYPE_IMAGE = 0x0001
     private const val NETWORK_MEDIA_TYPE_RTSP = 0x0100
@@ -132,11 +134,13 @@ object SourceManager {
                     afd.length
                 )
             }
-        } catch (_: SecurityException) {
+        } catch (s: SecurityException) {
             mediaIsReady = false
-        } catch (_: Exception) {
+            Dog.e(TAG, s.toString(), null, true)
+        } catch (e: Exception) {
             NativeBridge.resetVideoSource()
             mediaIsReady = false
+            Dog.e(TAG, e.toString(), null, true)
         }
     }
 
