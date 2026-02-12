@@ -10,6 +10,7 @@ import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicEntry
+import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
 import io.github.libxposed.api.XposedInterface.AfterHookCallback
@@ -36,7 +37,6 @@ object Camera1Hooker {
             else -> null
         }
     }
-
     fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
         val classLoader = param.classLoader
         val cameraClass = classLoader.loadClass("android.hardware.Camera")
@@ -96,7 +96,6 @@ object Camera1Hooker {
                 val cameraId = callback.args.getOrNull(0) as? Int ?: 0
                 val info = Camera.CameraInfo()
                 Camera.getCameraInfo(cameraId, info)
-
                 val state = getCameraState(camera)
 
                 state.apiLevel = 1
@@ -115,11 +114,15 @@ object Camera1Hooker {
                 val camera = callback.thisObject as Camera
                 val params = callback.args[0] as Camera.Parameters
                 val pictureSize = params.pictureSize
+                val previewSize = params.previewSize
                 val state = getCameraState(camera)
-
                 if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
                     state.pictureWidth = pictureSize.width
                     state.pictureHeight = pictureSize.height
+                }
+                if (state.previewWidth != previewSize.width || state.previewHeight != previewSize.height) {
+                    state.previewWidth = previewSize.width
+                    state.previewHeight = previewSize.height
                 }
             }
         }
@@ -212,9 +215,11 @@ object Camera1Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
-                NativeBridge.camera1Callback = callback.args[0] as? Camera.PreviewCallback
-                NativeBridge.currentCamera1 = callback.thisObject as? Camera
-                callback.returnAndSkip(null)
+                val camera = callback.thisObject as Camera
+                val originCallback = callback.args[0] as? Camera.PreviewCallback
+                NativeBridge.camera1Callback = originCallback
+                NativeBridge.currentCamera1 = camera
+                 callback.returnAndSkip(null)
             }
         }
     }
@@ -232,22 +237,22 @@ object Camera1Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
-
                 val shutter = callback.args[0] as? Camera.ShutterCallback
                 Handler(Looper.getMainLooper()).post { shutter?.onShutter() }
 
                 val camera = callback.thisObject as Camera
+                val state = getCameraState(camera)
                 val jpegCallback = callback.args[3] as? Camera.PictureCallback
-                if (jpegCallback != null) processShotJPEG(jpegCallback, camera)
+                if (jpegCallback != null) processShotJPEG(state.facingFront, jpegCallback, camera)
 
                 callback.returnAndSkip(null)
             }
 
-            private fun processShotJPEG(cb: Camera.PictureCallback, camera:Camera) {
+            private fun processShotJPEG(facingFront: Boolean, cb: Camera.PictureCallback, camera:Camera) {
                 Thread {
                     NativeBridge.getFrameSnapshot()?.let { snapshot ->
                         val (data, w, h) = snapshot
-                        val jpegData = NativeBridge.nv21ToJpegByteArray(data, w, h)
+                        val jpegData = NativeBridge.nv21ToJpegByteArray(facingFront, data, w, h)
                         // 回主线程回调
                         Handler(Looper.getMainLooper()).post { cb.onPictureTaken(jpegData, camera) }
                     }
