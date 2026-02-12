@@ -16,7 +16,6 @@ object NativeBridge {
     var lastFrameHeight = 0
     var camera1Callback: Camera.PreviewCallback? = null
     var currentCamera1: Camera? = null
-    var previewCallback: ((data: ByteArray, width: Int, height: Int) -> Unit)? = null
     @Volatile
     var hasValidFrame = false
     @Volatile
@@ -43,7 +42,7 @@ object NativeBridge {
         val expectedSize = width * height * 3 / 2
         if (buffer.size < expectedSize) return
 
-        PreviewNV21Helper.processFrame(buffer,width,height) { bitmap ->
+        PreviewNV21Helper.processFrame(buffer, width, height) { bitmap ->
             FloatWindowManager.updatePreview(bitmap)
         }
 
@@ -52,18 +51,14 @@ object NativeBridge {
                 camera1Callback?.onPreviewFrame(buffer, currentCamera1)
             }
         } catch (e: Exception) {
-            Dog.i("VCX", "Error in Camera1 callback: ${e.message}", SourceManager.enableLog)
+            Dog.i(TAG, "Error in Camera1 callback: ${e.message}", SourceManager.enableLog)
         }
-        // 分发给 camera2
-        previewCallback?.invoke(buffer, width, height)
     }
 
     @JvmStatic
     external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
     @JvmStatic
-    external fun registerSurface(packageName: String, apiLevel: Int, facingFront: Boolean,
-                                 sensorOrientation: Int, pictureWidth: Int, pictureHeight: Int,
-                                 displayOrientation: Int, surface: Surface)
+    external fun registerSurface(cameraState: CameraState)
     @JvmStatic
     external fun setDisplayOrientation(orientation: Int)
     @JvmStatic
@@ -80,15 +75,13 @@ object NativeBridge {
     @JvmStatic
     external fun needStartRenderer()
     @JvmStatic
-    external fun nv21ToJpegByteArray(nv21: ByteArray, width: Int, height: Int, quality: Int = 90): ByteArray?
+    external fun nv21ToJpegByteArray(facingFront: Boolean, nv21: ByteArray, width: Int, height: Int, quality: Int = 90): ByteArray?
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
             state.surface?.let { surface ->
                 if (forceRefresh || surface != lastSurface) {
-                    registerSurface(state.packageName, state.apiLevel,state.facingFront,
-                        state.sensorOrientation, state.pictureWidth, state.pictureHeight,
-                         state.displayOrientation, surface)
+                    registerSurface(cameraState = state)
                     lastRegisteredSurface = WeakReference(surface)
                 }
             }
