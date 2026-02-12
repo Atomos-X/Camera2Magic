@@ -65,6 +65,7 @@ fun SettingsView() {
         )
 
         // "Inject Control" 按钮
+        /*
         SettingsToggleButton(
             modifier = Modifier.weight(1f),
             text = stringResource(R.string.inject_control_button_name),
@@ -79,6 +80,8 @@ fun SettingsView() {
             isChecked = uiState.manuallyRotate,
             onClick = { viewModel.onManuallyRotateToggled() }
         )
+
+         */
     }
 }
 
