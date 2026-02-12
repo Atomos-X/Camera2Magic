@@ -8,6 +8,7 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
+import android.util.Log
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
@@ -155,8 +156,12 @@ object Camera2Hooker {
 
                 targetSurface?.let { surface ->
                     val info = NativeBridge.getSurfaceInfo(surface)
-                    state.pictureWidth = info[0]
-                    state.pictureHeight = info[1]
+                    val width = info[0]
+                    val height = info[1]
+                    state.pictureWidth = width
+                    state.pictureHeight = height
+                    state.previewWidth = width
+                    state.previewHeight = height
                     state.surface = surface
                 }
                 registerSurfaceIfNew(state, true)
