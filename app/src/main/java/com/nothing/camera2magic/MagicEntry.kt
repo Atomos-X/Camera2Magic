@@ -4,11 +4,10 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.view.Surface
+import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager
-import com.nothing.camera2magic.hook.WebRTCHooker
 import com.nothing.camera2magic.utils.FloatWindowManager
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
@@ -22,24 +21,22 @@ object GlobalState {
     lateinit var appContext: Context
     @Volatile
     lateinit var packageName: String
-    @Volatile
-    lateinit var realSurface: Surface
-    @Volatile
-    lateinit var blackHole: Surface
 }
 
 private const val TAG = "[Entry]"
 
 class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule(base, param) {
-    init { System.loadLibrary("camera_magic") }
+    init {
+        System.loadLibrary("camera_magic")
+    }
     class AttachHooker : XposedInterface.Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 val context = callback.args[0] as Context
                 GlobalState.appContext = context
-                val application = callback.thisObject as Application
-                FloatWindowManager.init(application)
+                // val application = callback.thisObject as Application
+                // FloatWindowManager.init(application)
             }
         }
     }
@@ -49,7 +46,7 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
             fun after(callback: AfterHookCallback) {
                 val activity = callback.thisObject as Activity
                 SourceManager.refreshAndDispatch()
-                FloatWindowManager.updateFloatWindowVisibility(activity, SourceManager.injectMenuEnabled)
+                // FloatWindowManager.updateFloatWindowVisibility(activity, SourceManager.injectMenuEnabled)
             }
         }
     }
@@ -71,6 +68,5 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
 
         Camera1Hooker.initHooks(this, param)
         Camera2Hooker.initHooks(this, param)
-        WebRTCHooker.initHooks(this, param)
     }
 }
