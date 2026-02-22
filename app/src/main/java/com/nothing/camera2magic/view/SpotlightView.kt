@@ -139,7 +139,10 @@ private fun MediaPreviewGrid(
     onTypeSelected: (MediaType) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         mediaTypes.forEach { type ->
             Column(modifier = Modifier.weight(1f)) {
                 MediaThumbnailCard(
@@ -151,7 +154,6 @@ private fun MediaPreviewGrid(
                 RadioButtonRow(
                     selected = currentType == type,
                     onClick = { onTypeSelected(type) },
-                    enabled = type != MediaType.IMAGE
                 )
             }
         }
@@ -256,14 +258,13 @@ private fun DeleteModeOverlay(visible: Boolean, onClear: () -> Unit) {
 }
 
 @Composable
-private fun RadioButtonRow(selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun RadioButtonRow(selected: Boolean, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically) {
         RadioButton(
             selected = selected,
             onClick = onClick,
-            enabled = enabled,
             colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
 
         )

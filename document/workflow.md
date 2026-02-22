@@ -8,7 +8,7 @@
     E --> F[启动工作线程]
     
         F --> T1[Demuxer Thread]
-        F --> T2[Video Decode Thread]
+        F --> T2[MagicVideo Decode Thread]
         F --> T3[Audio Decode Thread]
         F --> T4[Render Thread]
         F --> T5[NV21 Transcode Thread]
@@ -26,7 +26,7 @@
         D0[Demuxer Thread Loop]
         D0 --> D1[AMediaExtractor / FFmpeg demux]
         D1 --> D2{Packet Type?}
-        D2 -->|Video| D3[push VideoPacket -> VideoQueue]
+        D2 -->|MagicVideo| D3[push VideoPacket -> VideoQueue]
         D2 -->|Audio| D4[push AudioPacket -> AudioQueue]
     
         D3 --> D5{Queue Full?}
@@ -37,7 +37,7 @@
 3. `视频解码` -> `OES` -> `RGBA Texture` 管线    
     ```mermaid
     flowchart TD
-        V0[Video Decode Thread]
+        V0[MagicVideo Decode Thread]
         V0 --> V1[MediaCodec dequeueInputBuffer]
         V1 --> V2[queue VideoPacket]
         V2 --> V3[MediaCodec dequeueOutputBuffer]
@@ -46,7 +46,7 @@
         V4 --> V5[Texture Copier Shader]
         V5 --> V6[RGBA Texture]
     
-        V6 --> V7[Apply Video Rotation Matrix<br/> sensor / display / metadata]
+        V6 --> V7[Apply MagicVideo Rotation Matrix<br/> sensor / display / metadata]
     ```
 4. 视频双缓冲，GPU异步`NV21`转码    
     ```mermaid

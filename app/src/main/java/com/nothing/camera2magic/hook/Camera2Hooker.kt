@@ -2,13 +2,11 @@ package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
-import android.util.Log
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState

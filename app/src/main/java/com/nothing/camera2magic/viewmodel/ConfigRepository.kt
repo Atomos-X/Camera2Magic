@@ -41,7 +41,7 @@ enum class MediaType(val value: Int, val mimeType: String) {
  * @param injectMenu 是否注入菜单
  * @param manuallyRotate 是否手动旋转
  * @param mediaSource 媒体源; 0: Local, 1: Network
- * @param localMediaType 本地媒体类型，仅在 `mediaSource = 0` 时有效; 0: Video, 1: Image
+ * @param localMediaType 本地媒体类型，仅在 `mediaSource = 0` 时有效; 0: MagicVideo, 1: MagicImage
  * @param videoId 视频 ID
  * @param imageId 图片 ID
  */
