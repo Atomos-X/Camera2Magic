@@ -2,14 +2,12 @@ package com.nothing.camera2magic.hook
 
 import android.content.ContentUris
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.provider.MediaStore
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+
 
 object SourceManager {
     private const val TAG = "[MediaSource]"
@@ -19,8 +17,6 @@ object SourceManager {
     private const val KEY_MODULE_ENABLED = "main_module_enabled"
     private const val KEY_PLAY_SOUND = "main_play_sound"
     private const val KEY_ENABLE_LOG = "main_enable_log"
-    private const val KEY_INJECT_MENU = "main_inject_menu"
-    private const val KEY_MANUALLY_ROTATE = "main_manually_rotate"
     private const val KEY_MEDIA_SOURCE = "media_source" // 0: local, 1: network
     private const val KEY_LOCAL_MEDIA_TYPE = "local_media_type" // 0: video, 1: image
     private const val KEY_LOCAL_VIDEO_ID = "local_video_id"
@@ -31,24 +27,21 @@ object SourceManager {
 
     private var lastMediaFingerprint: String = ""
     @Volatile
-    private var moduleEnabled: Boolean = true
+    var moduleEnabled: Boolean = true
+        private set
     @Volatile
     private var playSound: Boolean = false
     @Volatile
     var enableLog: Boolean = false
         private set
     @Volatile
-    var injectMenuEnabled: Boolean = false
-        private set
-    @Volatile
-    private var manuallyRotate: Boolean = false
-    @Volatile
     private var mediaSource: Int = 0
     @Volatile
     private var mediaType: Int = 0
-
     @Volatile
     private var selectedMedia: Int = 0x0000
+    @Volatile
+    var toastMessage: String? = null
     @Volatile
     private var videoId: Long = -1L
     @Volatile
@@ -68,6 +61,10 @@ object SourceManager {
 
     fun refreshAndDispatch() {
         refreshPrefs()
+        if (!moduleEnabled) {
+            toastMessage = "模块未启用"
+            return
+        }
         val fingerprint = getMediaFingerprint()
         if (fingerprint != lastMediaFingerprint) {
             dispatchMediaSourceToNative()
@@ -81,8 +78,6 @@ object SourceManager {
             moduleEnabled = prefs.getBoolean(KEY_MODULE_ENABLED, true)
             playSound = prefs.getBoolean(KEY_PLAY_SOUND, false)
             enableLog = prefs.getBoolean(KEY_ENABLE_LOG, false)
-            injectMenuEnabled = prefs.getBoolean(KEY_INJECT_MENU, false)
-            manuallyRotate = prefs.getBoolean(KEY_MANUALLY_ROTATE, false)
 
             mediaSource = prefs.getInt(KEY_MEDIA_SOURCE, 0)
             mediaType = prefs.getInt(KEY_LOCAL_MEDIA_TYPE, 0)
@@ -92,7 +87,7 @@ object SourceManager {
             imageId = prefs.getLong(KEY_LOCAL_IMAGE_ID, -1L)
             rtspUri = prefs.getString(KEY_NETWORK_RTSP_URI, "") ?: ""
 
-            NativeBridge.updateGlobalConfig(playSound, enableLog, manuallyRotate)
+            NativeBridge.updateGlobalConfig(playSound, enableLog)
 
         } catch (e: Exception) { /* Do Nothing */ }
     }
@@ -103,7 +98,7 @@ object SourceManager {
         mediaIsReady = false
         when (selectedMedia) {
             LOCAL_MEDIA_TYPE_VIDEO -> { updateVideoSource() }
-            LOCAL_MEDIA_TYPE_IMAGE -> { }
+            LOCAL_MEDIA_TYPE_IMAGE -> { updateImageSource() }
             NETWORK_MEDIA_TYPE_RTSP -> { }
         }
     }
@@ -122,6 +117,7 @@ object SourceManager {
         if (videoId == -1L) {
             mediaIsReady = false
             NativeBridge.resetVideoSource()
+            toastMessage = "未设置视频"
             return
         }
 
@@ -134,23 +130,42 @@ object SourceManager {
                     afd.length
                 )
             }
-        } catch (s: SecurityException) {
+            toastMessage = if (mediaIsReady) "视频已就绪" else "视频传输异常(Native)"
+
+        } catch (_: SecurityException) {
             mediaIsReady = false
-            Dog.e(TAG, s.toString(), null, true)
-        } catch (e: Exception) {
+            toastMessage = "无权限读取视频"
+        } catch (_: Exception) {
             NativeBridge.resetVideoSource()
             mediaIsReady = false
-            Dog.e(TAG, e.toString(), null, true)
+            toastMessage = "视频传输异常(Java IO)"
         }
     }
 
-    private suspend fun loadStaticImageFrom(id: Long): Bitmap = withContext(Dispatchers.IO) {
+    private fun updateImageSource() {
+        if (imageId == -1L) {
+            mediaIsReady = false
+            toastMessage = "未设置图片"
+            return
+        }
         val context = GlobalState.appContext
-        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-        val source = ImageDecoder.createSource(context.contentResolver, uri)
-        return@withContext ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
+        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId)
+        try {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
+            }
+            mediaIsReady = NativeBridge.processBitmap(bitmap)
+
+            toastMessage = if (mediaIsReady) "图片已就绪" else "图片接收失败(Native)"
+        } catch (_: SecurityException) {
+            mediaIsReady = false
+            toastMessage = "无权限读取图片"
+
+        } catch (_: Exception) {
+            mediaIsReady = false
+            toastMessage = "图片传输异常(Java IO)"
         }
     }
 }

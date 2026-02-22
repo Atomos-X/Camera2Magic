@@ -10,7 +10,6 @@ import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicEntry
-import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
 import io.github.libxposed.api.XposedInterface.AfterHookCallback
@@ -169,12 +168,9 @@ object Camera1Hooker {
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
-
                 val state = getCameraState(camera)
-
                 state.surface = getSurfaceFrom(surfaceCache[camera]) ?: return
                 val activeCamera = activeCameraRef?.get()
-
                 if (activeCamera != null && camera === activeCamera) {
                     NativeBridge.registerSurfaceIfNew(state, true)
                     NativeBridge.needStartRenderer()

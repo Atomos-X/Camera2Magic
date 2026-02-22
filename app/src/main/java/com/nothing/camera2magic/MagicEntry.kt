@@ -4,23 +4,28 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.graphics.SurfaceTexture
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager
-import com.nothing.camera2magic.utils.FloatWindowManager
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
 import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 object GlobalState {
     @Volatile
     lateinit var appContext: Context
     @Volatile
     lateinit var packageName: String
+    @Volatile
+    var activityCount = 0
 }
 
 private const val TAG = "[Entry]"
@@ -35,18 +40,40 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
             fun before(callback: BeforeHookCallback) {
                 val context = callback.args[0] as Context
                 GlobalState.appContext = context
-                // val application = callback.thisObject as Application
-                // FloatWindowManager.init(application)
             }
         }
     }
-    class ActivityHooker : XposedInterface.Hooker {
+    class ActivityOnStartHooker : XposedInterface.Hooker {
         companion object {
+            private val isProcessing = AtomicBoolean(false)
             @JvmStatic
             fun after(callback: AfterHookCallback) {
+                GlobalState.activityCount++
                 val activity = callback.thisObject as Activity
-                SourceManager.refreshAndDispatch()
-                // FloatWindowManager.updateFloatWindowVisibility(activity, SourceManager.injectMenuEnabled)
+                if (GlobalState.activityCount == 1) {
+                    if (isProcessing.compareAndSet(false, true)) {
+                        thread {
+                            try {
+                                SourceManager.refreshAndDispatch()
+                                Handler(Looper.getMainLooper()).post {
+                                    val text = "[✨] " + SourceManager.toastMessage
+                                    Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+                                }
+                            } finally {
+                                isProcessing.set(false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    class ActivityOnStopHooker : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun after() {
+                GlobalState.activityCount--
             }
         }
     }
@@ -63,8 +90,11 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
         val attachMethod = Application::class.java.getDeclaredMethod("attach", Context::class.java)
         hook(attachMethod, AttachHooker::class.java)
 
-        val resumeMethod = Activity::class.java.getDeclaredMethod("onResume")
-        hook(resumeMethod, ActivityHooker::class.java)
+        val resumeMethod = Activity::class.java.getDeclaredMethod("onStart")
+        hook(resumeMethod, ActivityOnStartHooker::class.java)
+
+        val leaveHintMethod = Activity::class.java.getDeclaredMethod("onStop")
+        hook(leaveHintMethod, ActivityOnStopHooker::class.java)
 
         Camera1Hooker.initHooks(this, param)
         Camera2Hooker.initHooks(this, param)

@@ -56,7 +56,7 @@ object NativeBridge {
     }
 
     @JvmStatic
-    external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean, manuallyRotate: Boolean)
+    external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean)
     @JvmStatic
     external fun registerSurface(cameraState: CameraState)
     @JvmStatic

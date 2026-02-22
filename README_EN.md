@@ -9,7 +9,7 @@
 
 ## Usage Precautions    
 **Development & Testing Device: OnePlus 8T LPDDR4 (ColorOS Port 16.0)**    
-- Video files must be placed in local public storage directories, such as `DCIM`, `Movies`, etc.    
+- MagicVideo files must be placed in local public storage directories, such as `DCIM`, `Movies`, etc.    
 - The module must be granted permission to **read media/files**.    
 - The target application (e.g., TikTok) must be granted permission to **read media/files**.    
 - The device must be **Rooted** with the **LSPosed Framework** installed. Enable the module in LSPosed Manager and select the target scope (e.g., `TikTok`, `Telegram`, etc.).    
@@ -34,7 +34,7 @@
 - [ ] Network video stream support    
 - [x] Preview screen replacement    
     - [x] Corrected `Preview Surface` rendering to match the visual aspect ratio    
-    - [x] Image cropping to adapt to `Preview Surface` ratio (minimizing stretching/distortion)    
+    - [x] MagicImage cropping to adapt to `Preview Surface` ratio (minimizing stretching/distortion)    
     - [x] Real-time adaptation to target app's ratio switching    
 - [x] `NV21 byte[]` generation    
     - [x] Camera1 API: Capture photos using current NV21 data (Default)    
