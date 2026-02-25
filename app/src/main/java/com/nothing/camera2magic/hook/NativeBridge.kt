@@ -64,10 +64,9 @@ object NativeBridge {
     @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray
     @JvmStatic
-    external fun resetVideoSource()
+    external fun resetMediaSource()
     @JvmStatic
     external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
-
     @JvmStatic
     external fun processBitmap(bitmap: Bitmap): Boolean
     @JvmStatic
