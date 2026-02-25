@@ -5,9 +5,9 @@ plugins {
 }
 
 // 版本控制变量
-def majorVersion = 0
-def minorVersion = 8
-def patchVersion = 6
+def majorVersion = 1
+def minorVersion = 0
+def patchVersion = 0
 def versionCodeOffset = 57225 // 保持与旧版本兼容的偏移量
 
 def getGitCommitHash = { ->
@@ -56,7 +56,8 @@ android {
         }
 
         ndk {
-            abiFilters.addAll(["arm64-v8a"])
+            abiFilters.add("arm64-v8a")
+           // abiFilters.add("armeabi-v7a")  // can't support android 32-bit
         }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -73,7 +74,8 @@ android {
     // 自定义生成的 APK 文件名
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}.${gitCommitHash}.apk"
+//            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}.${gitCommitHash}.apk"
+            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-rc1.apk"
             output.outputFileName = fileName
         }
     }
@@ -112,7 +114,7 @@ android {
 
 afterEvaluate {
     if (!isExplicitNativeBuild) {
-        def jniLibFile = file("src/main/jniLibs/arm64-v8a/libcamera_magic.so")
+        def jniLibFile = file("src/main/jniLibs/**/libcamera_magic.so")
         if (!jniLibFile.exists()) {
             println ">>> [警告] jniLibs 文件不存在， 无法快速编译 <<<"
             return

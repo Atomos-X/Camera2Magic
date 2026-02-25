@@ -2,11 +2,11 @@ package com.nothing.camera2magic.hook
 
 import android.content.ContentUris
 import android.content.SharedPreferences
-import android.graphics.ColorSpace
-import android.graphics.ImageDecoder
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.provider.MediaStore
 import com.nothing.camera2magic.GlobalState
-import com.nothing.camera2magic.utils.Dog
+import java.io.FileNotFoundException
 
 
 object SourceManager {
@@ -113,59 +113,97 @@ object SourceManager {
     }
 
     private fun updateVideoSource() {
-        val context = GlobalState.appContext
         if (videoId == -1L) {
-            mediaIsReady = false
-            NativeBridge.resetVideoSource()
-            toastMessage = "未设置视频"
+            NativeBridge.resetMediaSource()
+            updateState(false, "未设置视频")
             return
         }
-
+        val contentResolver = GlobalState.appContext.contentResolver
         val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videoId)
-        try {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
-                mediaIsReady = NativeBridge.processVideo(
-                    afd.parcelFileDescriptor.fd,
-                    afd.startOffset,
-                    afd.length
+
+        val result = runCatching {
+            val afd = contentResolver.openAssetFileDescriptor(uri, "r")
+                ?: throw FileNotFoundException("无法打开视频：$uri")
+            afd.use { it ->
+                NativeBridge.processVideo(
+                    it.parcelFileDescriptor.fd,
+                    it.startOffset,
+                    it.length
                 )
             }
-            toastMessage = if (mediaIsReady) "视频已就绪" else "视频传输异常(Native)"
+        }
 
-        } catch (_: SecurityException) {
-            mediaIsReady = false
-            toastMessage = "无权限读取视频"
-        } catch (_: Exception) {
-            NativeBridge.resetVideoSource()
-            mediaIsReady = false
-            toastMessage = "视频传输异常(Java IO)"
+        result.onSuccess { success ->
+            val msg = if (success) "视频已就绪" else "视频接收异常(Native)"
+            updateState(success, msg)
+        }.onFailure { e ->
+            val msg = when(e) {
+                is SecurityException -> "无权限读取视频"
+                else -> "图片传输异常(Java IO)"
+            }
+            updateState(false, msg)
         }
     }
 
     private fun updateImageSource() {
         if (imageId == -1L) {
-            mediaIsReady = false
-            toastMessage = "未设置图片"
+            NativeBridge.resetMediaSource()
+            updateState(false, "未设置图片")
             return
         }
-        val context = GlobalState.appContext
+
         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId)
-        try {
-            val source = ImageDecoder.createSource(context.contentResolver, uri)
-            val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
+        val contentResolver = GlobalState.appContext.contentResolver
+        val result = runCatching {
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+                contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it, null, this)
+                }
             }
-            mediaIsReady = NativeBridge.processBitmap(bitmap)
 
-            toastMessage = if (mediaIsReady) "图片已就绪" else "图片接收失败(Native)"
-        } catch (_: SecurityException) {
-            mediaIsReady = false
-            toastMessage = "无权限读取图片"
+            options.inJustDecodeBounds = false
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888
+            options.inSampleSize = calculateInSampleSize(options, 1080, 1920)
 
-        } catch (_: Exception) {
-            mediaIsReady = false
-            toastMessage = "图片传输异常(Java IO)"
+            val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            } ?: throw IllegalStateException("无法解码图片")
+
+            try {
+                NativeBridge.processBitmap(bitmap)
+            } finally {
+                bitmap.recycle()
+            }
         }
+
+        result.onSuccess { success ->
+            val msg = if (success) "图片已就绪" else "图片接收失败(Native)"
+            updateState(success, msg)
+        }.onFailure { e ->
+            val msg = when (e) {
+                is SecurityException -> "无权限读取图片"
+                else -> "图片传输异常(Java IO)"
+            }
+            updateState(false, msg)
+        }
+    }
+
+    fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    private fun updateState(ready: Boolean, message: String) {
+        mediaIsReady = ready
+        toastMessage = message
     }
 }

@@ -54,7 +54,7 @@
 ### Known Issues    
 - [x] Fixed: Green lines on video edges.    
 - [x] Fixed: Camera1 API failing to correctly stop decoding/playback threads after photo capture or video recording.    
-- [x] Fixed: Camera2 API failing to correctly hook the camera `close` signal when switching menus in certain apps (e.g., `TikTok: POST <-> TEMPLATES`), leading to unexpected thread behavior.    
+- [x] Fixed: Camera2 API failing to correctly hook the camera `stop` signal when switching menus in certain apps (e.g., `TikTok: POST <-> TEMPLATES`), leading to unexpected thread behavior.    
 - [ ] Ongoing: If camera permission is granted at runtime, 4K video may experience audio desync or pixelation on older devices. This can be temporarily resolved by toggling the front/rear camera; a permanent fix is pending in a future set_internal_state.    
 
 ### Floating Window (Injected into target app for Debugging)    

@@ -45,24 +45,15 @@ class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule
     }
     class ActivityOnStartHooker : XposedInterface.Hooker {
         companion object {
-            private val isProcessing = AtomicBoolean(false)
             @JvmStatic
             fun after(callback: AfterHookCallback) {
                 GlobalState.activityCount++
                 val activity = callback.thisObject as Activity
                 if (GlobalState.activityCount == 1) {
-                    if (isProcessing.compareAndSet(false, true)) {
-                        thread {
-                            try {
-                                SourceManager.refreshAndDispatch()
-                                Handler(Looper.getMainLooper()).post {
-                                    val text = "[✨] " + SourceManager.toastMessage
-                                    Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
-                                }
-                            } finally {
-                                isProcessing.set(false)
-                            }
-                        }
+                    SourceManager.refreshAndDispatch()
+                    Handler(Looper.getMainLooper()).post {
+                        val text = "[✨] " + SourceManager.toastMessage
+                        Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
