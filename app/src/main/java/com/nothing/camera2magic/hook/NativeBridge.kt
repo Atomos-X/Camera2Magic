@@ -7,7 +7,6 @@ import android.hardware.Camera
 import android.view.Surface
 import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.utils.FloatWindowManager
-import com.nothing.camera2magic.utils.PreviewNV21Helper
 import java.lang.ref.WeakReference
 
 object NativeBridge {
@@ -42,10 +41,6 @@ object NativeBridge {
         val expectedSize = width * height * 3 / 2
         if (buffer.size < expectedSize) return
 
-        PreviewNV21Helper.processFrame(buffer, width, height) { bitmap ->
-            FloatWindowManager.updatePreview(bitmap)
-        }
-
         try {
             if (camera1Callback != null && currentCamera1 != null) {
                 camera1Callback?.onPreviewFrame(buffer, currentCamera1)
@@ -74,7 +69,9 @@ object NativeBridge {
     @JvmStatic
     external fun needStartRenderer()
     @JvmStatic
-    external fun nv21ToJpegByteArray(facingFront: Boolean, nv21: ByteArray, width: Int, height: Int, quality: Int = 90): ByteArray?
+    external fun overwritePreviewBuffer(originBuffer: ByteArray)
+    @JvmStatic
+    external fun overwriteJPEGBytes(jpegBytes: ByteArray, quality: Int = 90)
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
