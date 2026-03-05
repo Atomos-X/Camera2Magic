@@ -2,7 +2,7 @@
 
 [ README_EN.md ](README_EN.md)  ENGLISH Version translated by Google
 
-## RC1已发布，使用前必读：
+## RC2已发布，使用前必读：
   - **暂时无法支持32位系统，(Android 32-bit)**
   - **手机需要 `Root`， 且安装的`LSPosed Manager`为较新的官方内测版本（Modern api only)**
   - **使用时注意选择的图片或者视频，宿主能否正常访问，否则模块会回滚到未hook状态**
