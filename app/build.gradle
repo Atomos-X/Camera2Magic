@@ -57,7 +57,7 @@ android {
 
         ndk {
             abiFilters.add("arm64-v8a")
-            abiFilters.add("armeabi-v7a")  // can't support android 32-bit
+            // abiFilters.add("armeabi-v7a")  // can't support android 32-bit
         }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

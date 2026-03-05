@@ -1,5 +1,6 @@
 package com.nothing.camera2magic.hook
 import android.view.Surface
+import android.hardware.camera2.CameraDevice
 
 data class CameraState(
     var packageName: String = "",
