@@ -13,7 +13,7 @@ import android.os.Handler
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
-import com.nothing.camera2magic.MagicEntry
+import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.hook.NativeBridge.needStartRenderer
 
 import com.nothing.camera2magic.hook.NativeBridge.needStopRenderer
@@ -37,7 +37,6 @@ object Camera2Hooker {
     private var activeCameraRef: WeakReference<Any>? = null
     private var cameraState = WeakHashMap<CameraDevice, CameraState>()
     private var blackHole: Surface? = null
-
     private fun destroyBlackHole() {
         blackHole?.release()
         blackHole = null
@@ -81,9 +80,9 @@ object Camera2Hooker {
         magic.hook(onConfigureFailed, OnConfigureFailedHooker::class.java)
     }
 
-    private lateinit var magic: MagicEntry
+    private lateinit var magic: MagicHook
     @SuppressLint("PrivateApi")
-    fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
+    fun initHooks(module: MagicHook, param: PackageLoadedParam) {
         magic = module
         val classLoader = param.classLoader
         val deviceImpl = classLoader.loadClass("android.hardware.camera2.impl.CameraDeviceImpl")
@@ -101,6 +100,13 @@ object Camera2Hooker {
             Handler::class.java)
         magic.hook(createCaptureSessionOld, CreateCaptureSessionOldHooker::class.java)
 
+        val builderClass = classLoader.loadClass("android.hardware.camera2.CaptureRequest\$Builder")
+        val addTarget = builderClass.getDeclaredMethod("addTarget", Surface::class.java)
+        magic.hook(addTarget, AddTargetHooker::class.java)
+
+        val removeTarget = builderClass.getDeclaredMethod("removeTarget", Surface::class.java)
+        magic.hook(removeTarget, RemoveTargetHooker::class.java)
+
         val closeMethod = deviceImpl.getDeclaredMethod("close")
         magic.hook(closeMethod, CloseHooker::class.java)
     }
@@ -110,6 +116,7 @@ object Camera2Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
+                Dog.i(TAG, "Called func parameterTypes = SessionConfiguration", true)
                 val camera = callback.thisObject as CameraDevice
                 activeCameraRef = WeakReference(camera)
 
@@ -161,6 +168,7 @@ object Camera2Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
+                Dog.i(TAG, "Called func parameterTypes = List<Surface>", true)
                 val camera = callback.thisObject as CameraDevice
                 val state = getCameraState(camera)
 
@@ -168,12 +176,12 @@ object Camera2Hooker {
                 val surfaces = callback.args[0] as List<Surface>
 
                 val newList = surfaces.mapTo(ArrayList<Surface>()) { origin ->
-                    val (_, _, format) = NativeBridge.getSurfaceInfo(origin)
+                    val (width, height, format) = NativeBridge.getSurfaceInfo(origin)
                     if (format == 1 && blackHole == null) {
                         state.bindSurface(origin)
                         @SuppressLint("Recycle")
                         val st = SurfaceTexture(false)
-                            .apply { setDefaultBufferSize(1, 1) }
+                            .apply { setDefaultBufferSize(width, height) }
                         return@mapTo Surface(st).also { blackHole = it }
                     }
                     origin
@@ -201,10 +209,28 @@ object Camera2Hooker {
     class OnConfigureFailedHooker : XposedInterface.Hooker {
         companion object {
             @JvmStatic
-            fun before(callback: BeforeHookCallback) {
+            fun before() {
                 Dog.e(TAG, "createCaptureSession failed.", null, true)
                 destroyBlackHole()
                 activeCameraRef = null
+            }
+        }
+    }
+
+    class AddTargetHooker : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun before(callback: BeforeHookCallback) {
+                callback.args[0] = blackHole ?: return
+            }
+        }
+    }
+
+    class RemoveTargetHooker : XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun before() {
+                destroyBlackHole()
             }
         }
     }

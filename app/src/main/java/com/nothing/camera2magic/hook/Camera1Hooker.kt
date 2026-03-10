@@ -2,17 +2,20 @@
 
 package com.nothing.camera2magic.hook
 
+import android.annotation.SuppressLint
 import android.hardware.Camera
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.GlobalState
-import com.nothing.camera2magic.MagicEntry
+import com.nothing.camera2magic.MagicHook
+import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.BeforeHookCallback
 import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.lang.ref.WeakReference
+import java.lang.reflect.Proxy
 import java.util.WeakHashMap
 object Camera1Hooker {
     private const val TAG = "[CAM1]"
@@ -22,8 +25,9 @@ object Camera1Hooker {
 
     private var activeCameraRef: WeakReference<Any>? = null
     private var cameraState = WeakHashMap<Camera, CameraState>()
-    private val surfaceCache = WeakHashMap<Camera, Any>()
+    private var pushMode = false
     private var blackHole: Any? = null
+
     private fun destroyBlackHole() {
         when (blackHole) {
             is SurfaceTexture -> {
@@ -43,38 +47,10 @@ object Camera1Hooker {
     private fun isPreviewing(camera: Camera): Boolean {
         return activeCameraRef?.get() === camera
     }
-    private fun getSurfaceFrom(obj: Any?): Surface? {
-        return when (obj) {
-            is SurfaceTexture -> Surface(obj)
-            is Surface -> obj
-            else -> null
-        }
-    }
-    private fun CameraState.saveCameraInfo(info: Camera.CameraInfo) {
-        this.apiLevel = 1
-        this.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
-        this.sensorOrientation = info.orientation
-        this.packageName = GlobalState.packageName
-    }
-    private fun CameraState.bindSurface(camera: Camera, surface: Surface) {
-        val params = camera.parameters
-        val pictureSize = params.pictureSize
-        val previewSize = params.previewSize
 
-        if (this.pictureWidth != pictureSize.width || this.pictureHeight != pictureSize.height) {
-            this.pictureWidth = pictureSize.width
-            this.pictureHeight = pictureSize.height
-        }
-        if (this.previewWidth != previewSize.width || this.previewHeight != previewSize.height) {
-            this.previewWidth = previewSize.width
-            this.previewHeight = previewSize.height
-        }
+    private lateinit var magic: MagicHook
+    fun initHooks(module: MagicHook, param: PackageLoadedParam) {
 
-        this.surface = surface
-    }
-
-    private lateinit var magic: MagicEntry
-    fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
         magic = module
         val classLoader = param.classLoader
         val cameraClass = classLoader.loadClass("android.hardware.Camera")
@@ -83,6 +59,11 @@ object Camera1Hooker {
         openMethods.forEach { method ->
             module.hook(method, OpenMethodsHooker::class.java)
         }
+
+        val setParameters = cameraClass.getDeclaredMethod(
+            "setParameters",
+            Camera.Parameters::class.java)
+        module.hook(setParameters, CameraSetParameters::class.java)
 
         val setTexture = cameraClass.getDeclaredMethod(
             "setPreviewTexture",
@@ -119,8 +100,8 @@ object Camera1Hooker {
 
         module.hook(setPreviewCallbackWithBuffer, PreviewCallbackHooker::class.java)
 
-//        val addCallbackBufferMethod = cameraClass.getDeclaredMethod("addCallbackBuffer", ByteArray::class.java)
-//        module.hook(addCallbackBufferMethod, CameraAddCallbackBuffer::class.java)
+        val addCallbackBuffer = cameraClass.getDeclaredMethod("addCallbackBuffer", ByteArray::class.java)
+        module.hook(addCallbackBuffer, AddCallbackBufferHooker::class.java)
 
         val takePicture = cameraClass.getDeclaredMethod(
             "takePicture",
@@ -142,7 +123,33 @@ object Camera1Hooker {
                 val info = Camera.CameraInfo()
                 Camera.getCameraInfo(cameraId, info)
                 val state = getCameraState(camera)
-                state.saveCameraInfo(info)
+
+                state.apiLevel = 1
+                state.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+                state.sensorOrientation = info.orientation
+                state.packageName = GlobalState.packageName
+            }
+        }
+    }
+
+    class CameraSetParameters: XposedInterface.Hooker {
+        companion object {
+            @JvmStatic
+            fun after(callback: AfterHookCallback) {
+                if (!SourceManager.isReadyForHook()) return
+                val camera = callback.thisObject as Camera
+                val params = callback.args[0] as Camera.Parameters
+                val pictureSize = params.pictureSize
+                val previewSize = params.previewSize
+                val state = getCameraState(camera)
+                if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
+                    state.pictureWidth = pictureSize.width
+                    state.pictureHeight = pictureSize.height
+                }
+                if (state.previewWidth != previewSize.width || state.previewHeight != previewSize.height) {
+                    state.previewWidth = previewSize.width
+                    state.previewHeight = previewSize.height
+                }
             }
         }
     }
@@ -152,9 +159,14 @@ object Camera1Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
+                pushMode = false
                 val camera = callback.thisObject as Camera
-                val st = callback.args[0] as SurfaceTexture
-                surfaceCache[camera] = st
+                val surfaceTexture = callback.args[0] as SurfaceTexture
+                val state = getCameraState(camera)
+
+                @SuppressLint("Recycle")
+                state.surface = Surface(surfaceTexture)
+
                 callback.args[0] = SurfaceTexture(false)
                     .apply { setDefaultBufferSize(1, 1) }
                      .also { blackHole = it }
@@ -167,13 +179,22 @@ object Camera1Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
+                pushMode = true
                 val camera = callback.thisObject as Camera
                 val holder = callback.args[0] as SurfaceHolder
-                surfaceCache[camera] = holder.surface
+                val state = getCameraState(camera)
+                state.surface = holder.surface
+
+                @SuppressLint("Recycle")
                 val surfaceTexture = SurfaceTexture(false)
-                .apply { setDefaultBufferSize(1, 1) }
-                callback.args[0] = Surface(surfaceTexture)
-                    .also { blackHole = it }
+                    .apply { setDefaultBufferSize(1, 1) }
+                val surface = Surface(surfaceTexture).also { blackHole = it }
+                val proxyHolder = Proxy.newProxyInstance(holder.javaClass.classLoader,
+                    arrayOf(SurfaceHolder::class.java)) { _, method, args ->
+                    if (method.name == "getSurface") return@newProxyInstance surface
+                    return@newProxyInstance method.invoke(holder, *(args ?: arrayOfNulls<Any>(0)))
+                } as SurfaceHolder
+                callback.args[0] = proxyHolder
             }
         }
     }
@@ -201,9 +222,7 @@ object Camera1Hooker {
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
-                val surface = getSurfaceFrom(surfaceCache[camera]) ?: return
                 val state = getCameraState(camera)
-                state.bindSurface(camera, surface)
                 val activeCamera = activeCameraRef?.get()
                 if (activeCamera != null && camera === activeCamera) {
                     NativeBridge.registerSurfaceIfNew(state, true)
@@ -217,6 +236,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
+                if (!SourceManager.isReadyForHook()) return
                 val camera = callback.thisObject as Camera
                 val activeCamera = activeCameraRef?.get()
                 if (activeCamera != null && camera === activeCamera) {
@@ -230,6 +250,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
+                if (!SourceManager.isReadyForHook()) return
                 val closingCamera = callback.thisObject as Camera
                 val activeCamera = activeCameraRef?.get()
 
@@ -248,8 +269,7 @@ object Camera1Hooker {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val originCallback = callback.args[0] as Camera.PreviewCallback
+                val originCallback = callback.args[0] as? Camera.PreviewCallback ?: return
                 val clazz = originCallback.javaClass
                 val onPreviewFrame = clazz.getDeclaredMethod("onPreviewFrame",
                     ByteArray::class.java,
@@ -269,11 +289,12 @@ object Camera1Hooker {
         }
     }
 
-    class CameraAddCallbackBuffer : XposedInterface.Hooker {
+    class AddCallbackBufferHooker : XposedInterface.Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
                 if (!SourceManager.isReadyForHook()) return
+                val bytes = callback.args[0]
             }
         }
     }
@@ -282,6 +303,7 @@ object Camera1Hooker {
         companion object {
             @JvmStatic
             fun before(callback: BeforeHookCallback) {
+                if (!SourceManager.isReadyForHook()) return
                 // 只hook jpeg拍照
                 callback.args[3]?.let { cb ->
                     val clazz = (cb as Camera.PictureCallback).javaClass

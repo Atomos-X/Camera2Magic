@@ -16,8 +16,6 @@ import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.concurrent.thread
 
 object GlobalState {
     @Volatile
@@ -30,7 +28,7 @@ object GlobalState {
 
 private const val TAG = "[Entry]"
 
-class MagicEntry(base: XposedInterface, param: ModuleLoadedParam) : XposedModule(base, param) {
+class MagicHook(base: XposedInterface, param: ModuleLoadedParam) : XposedModule(base, param) {
     init {
         System.loadLibrary("camera_magic")
     }

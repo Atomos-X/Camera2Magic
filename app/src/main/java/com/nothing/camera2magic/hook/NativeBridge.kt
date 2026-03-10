@@ -7,12 +7,42 @@ import android.hardware.Camera
 import android.view.Surface
 import com.nothing.camera2magic.utils.Dog
 import java.lang.ref.WeakReference
+import java.util.WeakHashMap
 
 object NativeBridge {
     private const val TAG = "[Bridge]"
     @Volatile
     private var lastRegisteredSurface: WeakReference<Surface>? = null
+
     private val surfaceLock = Any()
+    @Volatile
+    private var cachedBuffer: ByteArray? = null
+
+    @Volatile
+    var currentCamera: WeakReference<Camera>? = null
+    @Volatile
+    var previewCallback: WeakReference<Camera.PreviewCallback>? = null
+
+    @JvmStatic
+    fun ensureBuffer(size: Int): ByteArray {
+        if (cachedBuffer != null && cachedBuffer!!.size == size) {
+            return cachedBuffer!!
+        }
+        return ByteArray(size).also { cachedBuffer = it }
+    }
+
+    @JvmStatic
+    fun frameUpdated(width: Int, height: Int) {
+        val buffer = cachedBuffer ?: return
+        val expectedSize = width * height * 3 / 2
+        if (buffer.size < expectedSize) return
+        runCatching {
+            val camera = currentCamera?.get() ?: return
+            val callback = previewCallback?.get() ?: return
+            callback.onPreviewFrame(buffer, camera)
+        }
+    }
+
     @JvmStatic
     external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean)
     @JvmStatic
