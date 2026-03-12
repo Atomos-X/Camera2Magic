@@ -4,18 +4,13 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedInterface.BeforeHookCallback
-import io.github.libxposed.api.XposedInterface.AfterHookCallback
 import io.github.libxposed.api.XposedModule
-import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+
 
 object GlobalState {
     @Volatile
@@ -28,64 +23,52 @@ object GlobalState {
 
 private const val TAG = "[Entry]"
 
-class MagicHook(base: XposedInterface, param: ModuleLoadedParam) : XposedModule(base, param) {
-    init {
-        System.loadLibrary("camera_magic")
-    }
-    class AttachHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val context = callback.args[0] as Context
-                GlobalState.appContext = context
-            }
-        }
-    }
-    class ActivityOnStartHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun after(callback: AfterHookCallback) {
-                GlobalState.activityCount++
-                val activity = callback.thisObject as Activity
-                if (GlobalState.activityCount == 1) {
-                    SourceManager.refreshAndDispatch()
-                    Handler(Looper.getMainLooper()).post {
-                        val text = "[✨] " + SourceManager.toastMessage
-                        Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
+class MagicHook : XposedModule() {
+
+    companion object {
+        const val TAG = "[MagicHook]"
     }
 
-    class ActivityOnStopHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun after() {
-                GlobalState.activityCount--
-            }
-        }
+    override fun onPackageReady(param: PackageReadyParam) {
+        if (!param.isFirstPackage) return
+        GlobalState.packageName = param.packageName
+        System.loadLibrary("camera_magic")
+        val remotePrefs = getRemotePreferences("camera_magic_config")
+        SourceManager.init(remotePrefs)
+        hookAttach()
+        hookActivity()
+        Camera1Hooker.initHooks(this, param)
+        Camera2Hooker.initHooks(this, param)
     }
 
     @SuppressLint("DiscouragedPrivateApi")
-    override fun onPackageLoaded(param: PackageLoadedParam) {
-        super.onPackageLoaded(param)
-        if (!param.isFirstPackage) return
-        GlobalState.packageName = param.packageName
+    private fun hookAttach() {
+        val attach = Application::class.java.getDeclaredMethod("attach", Context::class.java)
+        hook(attach).intercept { chain ->
+            GlobalState.appContext = chain.args[0] as Context
+            chain.proceed()
+        }
+    }
 
-        val remotePrefs = getRemotePreferences("camera_magic_config")
-        SourceManager.init(remotePrefs)
+    private fun hookActivity() {
+        val start = Activity::class.java.getDeclaredMethod("onStart")
+        hook(start).intercept { chain ->
+            chain.proceed()
+            val activity = chain.thisObject as Activity
+            GlobalState.activityCount ++
+            if (GlobalState.activityCount == 1) {
+                SourceManager.refreshAndDispatch()
+                activity.runOnUiThread {
+                    val text = "[✨] " + SourceManager.toastMessage
+                    Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
-        val attachMethod = Application::class.java.getDeclaredMethod("attach", Context::class.java)
-        hook(attachMethod, AttachHooker::class.java)
-
-        val resumeMethod = Activity::class.java.getDeclaredMethod("onStart")
-        hook(resumeMethod, ActivityOnStartHooker::class.java)
-
-        val leaveHintMethod = Activity::class.java.getDeclaredMethod("onStop")
-        hook(leaveHintMethod, ActivityOnStopHooker::class.java)
-
-        Camera1Hooker.initHooks(this, param)
-        Camera2Hooker.initHooks(this, param)
+        val stop = Activity::class.java.getDeclaredMethod("onStop")
+        hook(stop).intercept { chain ->
+            chain.proceed()
+            GlobalState.activityCount--
+        }
     }
 }
