@@ -2,17 +2,17 @@
 
 package com.nothing.camera2magic.hook
 
+import android.annotation.SuppressLint
 import android.hardware.Camera
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.GlobalState
-import com.nothing.camera2magic.MagicEntry
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedInterface.BeforeHookCallback
-import io.github.libxposed.api.XposedInterface.AfterHookCallback
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import com.nothing.camera2magic.MagicHook
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.lang.ref.WeakReference
+import java.lang.reflect.Proxy
 import java.util.WeakHashMap
 object Camera1Hooker {
     private const val TAG = "[CAM1]"
@@ -20,9 +20,9 @@ object Camera1Hooker {
     private val Camera?.shortId : String
         get() = if (this == null) "null" else "@0x${Integer.toHexString(System.identityHashCode(this))}"
 
-    private var activeCameraRef: WeakReference<Any>? = null
+    private var activeCameraRef: WeakReference<Camera>? = null
     private var cameraState = WeakHashMap<Camera, CameraState>()
-    private val surfaceCache = WeakHashMap<Camera, Any>()
+    private var pushMode = false
     private var blackHole: Any? = null
     private fun destroyBlackHole() {
         when (blackHole) {
@@ -43,263 +43,225 @@ object Camera1Hooker {
     private fun isPreviewing(camera: Camera): Boolean {
         return activeCameraRef?.get() === camera
     }
-    private fun getSurfaceFrom(obj: Any?): Surface? {
-        return when (obj) {
-            is SurfaceTexture -> Surface(obj)
-            is Surface -> obj
-            else -> null
-        }
-    }
-    private fun CameraState.saveCameraInfo(info: Camera.CameraInfo) {
-        this.apiLevel = 1
-        this.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
-        this.sensorOrientation = info.orientation
-        this.packageName = GlobalState.packageName
-    }
-    private fun CameraState.bindSurface(camera: Camera, surface: Surface) {
-        val params = camera.parameters
-        val pictureSize = params.pictureSize
-        val previewSize = params.previewSize
 
-        if (this.pictureWidth != pictureSize.width || this.pictureHeight != pictureSize.height) {
-            this.pictureWidth = pictureSize.width
-            this.pictureHeight = pictureSize.height
-        }
-        if (this.previewWidth != previewSize.width || this.previewHeight != previewSize.height) {
-            this.previewWidth = previewSize.width
-            this.previewHeight = previewSize.height
-        }
+    private lateinit var magic: MagicHook
+    private val hookedCallbackClasses = mutableSetOf<Class<*>>()
 
-        this.surface = surface
-    }
-
-    private lateinit var magic: MagicEntry
-    fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
+    fun initHooks(module: MagicHook, param: PackageReadyParam) {
         magic = module
-        val classLoader = param.classLoader
-        val cameraClass = classLoader.loadClass("android.hardware.Camera")
-
-        val openMethods = cameraClass.declaredMethods.filter { it.name == "open" }
-        openMethods.forEach { method ->
-            module.hook(method, OpenMethodsHooker::class.java)
+        Camera::class.java.apply {
+            hookOpenMethod()
+            hookSetParameters()
+            hookSetPreviewTexture()
+            hookSetPreviewDisplay()
+            hookSetDisplayOrientation()
+            hookStartPreview()
+            hookStopPreview()
+            hookRelease()
+            hookSetPreviewCallback()
+            hookAddCallbackBuffer()
+            hookTakePicture()
         }
+    }
+    private val openInterceptor: (Chain) -> Any? = intercept@{ chain ->
+        val camera = chain.proceed() as? Camera ?: return@intercept null
+        activeCameraRef = WeakReference(camera)
+        val cameraId = chain.args.getOrNull(0) as? Int ?: 0
+        val info = Camera.CameraInfo()
+        Camera.getCameraInfo(cameraId, info)
+        val state = getCameraState(camera)
 
-        val setTexture = cameraClass.getDeclaredMethod(
-            "setPreviewTexture",
-            SurfaceTexture::class.java)
-        module.hook(setTexture, SetPreviewTextureHooker::class.java)
+        state.apiLevel = 1
+        state.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+        state.sensorOrientation = info.orientation
+        state.packageName = GlobalState.packageName
+        camera
+    }
+    private fun Class<*>.hookOpenMethod() {
+        val open = getDeclaredMethod("open")
+        val openId = getDeclaredMethod("open", Int::class.java)
+        magic.hook(open).intercept(openInterceptor)
+        magic.hook(openId).intercept(openInterceptor)
+    }
+    private fun Class<*>.hookSetParameters() {
+        val setParameters = getDeclaredMethod("setParameters", Camera.Parameters::class.java)
+        magic.hook(setParameters).intercept { chain ->
+            chain.proceed()
+            val camera = chain.thisObject as Camera
+            val params = chain.args[0] as Camera.Parameters
+            val pictureSize = params.pictureSize
+            val previewSize = params.previewSize
+            val state = getCameraState(camera)
+            if (state.pictureWidth != pictureSize.width || state.pictureHeight != pictureSize.height) {
+                state.pictureWidth = pictureSize.width
+                state.pictureHeight = pictureSize.height
+            }
+            if (state.previewWidth != previewSize.width || state.previewHeight != previewSize.height) {
+                state.previewWidth = previewSize.width
+                state.previewHeight = previewSize.height
+            }
+        }
+    }
+    private fun Class<*>.hookSetPreviewTexture() {
+        val setPreviewTexture = getDeclaredMethod("setPreviewTexture", SurfaceTexture::class.java)
+        magic.hook(setPreviewTexture).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            val camera = chain.thisObject as Camera
+            val surfaceTexture = chain.args[0] as SurfaceTexture
+            val state = getCameraState(camera)
 
-        val setPreviewDisplay = cameraClass.getDeclaredMethod(
+            @SuppressLint("Recycle")
+            state.surface = Surface(surfaceTexture)
+            val fakeSurfaceTexture = SurfaceTexture(false)
+                .apply { setDefaultBufferSize(1, 1) }
+
+            blackHole = fakeSurfaceTexture.also { chain.proceed(arrayOf(it)) }
+        }
+    }
+    private fun Class<*>.hookSetPreviewDisplay() {
+        val setPreviewDisplay = getDeclaredMethod(
             "setPreviewDisplay",
             SurfaceHolder::class.java)
-        module.hook(setPreviewDisplay, SetPreviewDisplayHooker::class.java)
+        magic.hook(setPreviewDisplay).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
 
-        val setDisplayOrientation = cameraClass.getDeclaredMethod(
+            pushMode = true
+            val camera = chain.thisObject as Camera
+            val holder = chain.args[0] as SurfaceHolder
+            val state = getCameraState(camera)
+            state.surface = holder.surface
+
+            @SuppressLint("Recycle")
+            val surfaceTexture = SurfaceTexture(false)
+                .apply { setDefaultBufferSize(1, 1) }
+            val surface = Surface(surfaceTexture).also { blackHole = it }
+            val surfaceHolderProxy = Proxy.newProxyInstance(holder.javaClass.classLoader,
+                arrayOf(SurfaceHolder::class.java)) { _, method, args ->
+                if (method.name == "getSurface") return@newProxyInstance surface
+                return@newProxyInstance method.invoke(holder, *(args ?: arrayOfNulls<Any>(0)))
+            } as SurfaceHolder
+            chain.proceed(arrayOf(surfaceHolderProxy))
+        }
+    }
+    private fun Class<*>.hookSetDisplayOrientation() {
+        val setDisplayOrientation = getDeclaredMethod(
             "setDisplayOrientation",
             Int::class.javaPrimitiveType)
-        module.hook(setDisplayOrientation, SetDisplayOrientationHooker::class.java)
 
-        val startPreview = cameraClass.getDeclaredMethod("startPreview")
-        module.hook(startPreview, StartPreviewHooker::class.java)
+        magic.hook(setDisplayOrientation).intercept { chain ->
+            val camera = chain.thisObject as Camera
+            val state = getCameraState(camera)
+            val displayOrientation = chain.args[0] as Int
+            if (!SourceManager.isReadyForHook() || state.displayOrientation == displayOrientation) return@intercept chain.proceed()
+            state.displayOrientation = displayOrientation
+            if (isPreviewing(camera)) {
+                NativeBridge.setDisplayOrientation(displayOrientation)
+            }
+        }
+    }
+    private fun Class<*>.hookStartPreview() {
+        val startPreview = getDeclaredMethod("startPreview")
+        magic.hook(startPreview).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            val camera = chain.thisObject as Camera
+            val state = getCameraState(camera)
+            val activeCamera = activeCameraRef?.get()
+            if (activeCamera != null && camera === activeCamera) {
+                NativeBridge.registerSurfaceIfNew(state, true)
+                NativeBridge.needStartRenderer()
+            }
+            chain.proceed()
+        }
+    }
+    private fun Class<*>.hookStopPreview() {
+        val stopPreview = getDeclaredMethod("stopPreview")
+        magic.hook(stopPreview).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            val camera = chain.thisObject as Camera
+            val activeCamera = activeCameraRef?.get()
+            if (activeCamera != null && camera === activeCamera) {
+                NativeBridge.needStopRenderer()
+            }
+        }
+    }
+    private fun Class<*>.hookRelease() {
+        val release = getDeclaredMethod("release")
+        magic.hook(release).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            val closingCamera = chain.thisObject as Camera
+            val activeCamera = activeCameraRef?.get()
 
-        val stopPreview = cameraClass.getDeclaredMethod("stopPreview")
-        module.hook(stopPreview, StopPreviewHooker::class.java)
+            if (activeCamera != null && closingCamera === activeCamera) {
+                NativeBridge.needStopRenderer()
+                NativeBridge.releaseLastRegisteredSurface()
+                destroyBlackHole()
+                activeCameraRef = null
+            }
+        }
+    }
 
-        val release = cameraClass.getDeclaredMethod("release")
-        module.hook(release, ReleaseHooker::class.java)
+    private val previewCallbackInterceptor: (Chain) -> Any? = intercept@ { chain ->
+        if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+        val originCallback = chain.args[0] as? Camera.PreviewCallback ?: return@intercept chain.proceed()
+        val clazz = originCallback.javaClass
+        synchronized(hookedCallbackClasses) {
+            if (hookedCallbackClasses.add(clazz)) {
+                val onPreviewFrame = clazz.getDeclaredMethod("onPreviewFrame",
+                    ByteArray::class.java,
+                    Camera::class.java)
+                magic.hook(onPreviewFrame).intercept { frameChain ->
+                    val originBuffer = frameChain.args[0] as ByteArray
+                    NativeBridge.overwritePreviewBuffer(originBuffer)
+                    frameChain.proceed()
+                }
+            }
+        }
+        chain.proceed()
+    }
 
-        val setPreviewCallback = cameraClass.getDeclaredMethod(
+    private fun Class<*>.hookSetPreviewCallback() {
+        val setPreviewCallback = getDeclaredMethod(
             "setPreviewCallback",
             Camera.PreviewCallback::class.java)
-        module.hook(setPreviewCallback, PreviewCallbackHooker::class.java)
-
-        val setPreviewCallbackWithBuffer = cameraClass.getDeclaredMethod(
+        val setPreviewCallbackWithBuffer = getDeclaredMethod(
             "setPreviewCallbackWithBuffer",
             Camera.PreviewCallback::class.java)
+        magic.hook(setPreviewCallback).intercept(previewCallbackInterceptor)
+        magic.hook(setPreviewCallbackWithBuffer).intercept(previewCallbackInterceptor)
+    }
 
-        module.hook(setPreviewCallbackWithBuffer, PreviewCallbackHooker::class.java)
+    private fun Class<*>.hookAddCallbackBuffer() {
+        val addCallbackBuffer = getDeclaredMethod("addCallbackBuffer",
+            ByteArray::class.java)
+        // TODO:
+    }
 
-//        val addCallbackBufferMethod = cameraClass.getDeclaredMethod("addCallbackBuffer", ByteArray::class.java)
-//        module.hook(addCallbackBufferMethod, CameraAddCallbackBuffer::class.java)
 
-        val takePicture = cameraClass.getDeclaredMethod(
+    private fun Class<*>.hookTakePicture() {
+        val takePicture = getDeclaredMethod(
             "takePicture",
             Camera.ShutterCallback::class.java,
             Camera.PictureCallback::class.java, // raw
             Camera.PictureCallback::class.java, // post view
             Camera.PictureCallback::class.java) // jpeg
 
-        module.hook(takePicture, TakePictureHooker::class.java)
-
-    }
-    class OpenMethodsHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun after(callback: AfterHookCallback) {
-                val camera = callback.result as Camera
-                activeCameraRef = WeakReference(camera)
-                val cameraId = callback.args.getOrNull(0) as? Int ?: 0
-                val info = Camera.CameraInfo()
-                Camera.getCameraInfo(cameraId, info)
-                val state = getCameraState(camera)
-                state.saveCameraInfo(info)
-            }
-        }
-    }
-
-    class SetPreviewTextureHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val st = callback.args[0] as SurfaceTexture
-                surfaceCache[camera] = st
-                callback.args[0] = SurfaceTexture(false)
-                    .apply { setDefaultBufferSize(1, 1) }
-                     .also { blackHole = it }
-            }
-        }
-    }
-
-    class SetPreviewDisplayHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val holder = callback.args[0] as SurfaceHolder
-                surfaceCache[camera] = holder.surface
-                val surfaceTexture = SurfaceTexture(false)
-                .apply { setDefaultBufferSize(1, 1) }
-                callback.args[0] = Surface(surfaceTexture)
-                    .also { blackHole = it }
-            }
-        }
-    }
-
-    class SetDisplayOrientationHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val state = getCameraState(camera)
-                val displayOrientation = callback.args[0] as Int
-                if (state.displayOrientation == displayOrientation) return
-                state.displayOrientation = displayOrientation
-                if (isPreviewing(camera)) {
-                    NativeBridge.setDisplayOrientation(displayOrientation)
+        magic.hook(takePicture).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            chain.args[3]?.let { cb ->
+                val clazz = (cb as Camera.PictureCallback).javaClass
+                synchronized(hookedCallbackClasses) {
+                    if (hookedCallbackClasses.add(clazz)) {
+                        val onPictureTaken = clazz.getDeclaredMethod("onPictureTaken",
+                            ByteArray::class.java, Camera::class.java)
+                        magic.hook(onPictureTaken).intercept { shot ->
+                            val jpegBytes = shot.args[0] as ByteArray
+                            NativeBridge.overwriteJPEGBytes(jpegBytes)
+                            shot.proceed()
+                        }
+                    }
                 }
             }
-        }
-    }
-
-    class StartPreviewHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val surface = getSurfaceFrom(surfaceCache[camera]) ?: return
-                val state = getCameraState(camera)
-                state.bindSurface(camera, surface)
-                val activeCamera = activeCameraRef?.get()
-                if (activeCamera != null && camera === activeCamera) {
-                    NativeBridge.registerSurfaceIfNew(state, true)
-                    NativeBridge.needStartRenderer()
-                }
-            }
-        }
-    }
-
-    class StopPreviewHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val camera = callback.thisObject as Camera
-                val activeCamera = activeCameraRef?.get()
-                if (activeCamera != null && camera === activeCamera) {
-                    NativeBridge.needStopRenderer()
-                }
-            }
-        }
-    }
-
-    class ReleaseHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val closingCamera = callback.thisObject as Camera
-                val activeCamera = activeCameraRef?.get()
-
-                if (activeCamera != null && closingCamera === activeCamera) {
-                    NativeBridge.needStopRenderer()
-                    NativeBridge.releaseLastRegisteredSurface()
-                    destroyBlackHole()
-                    activeCameraRef = null
-                }
-            }
-        }
-    }
-
-    class PreviewCallbackHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as Camera
-                val originCallback = callback.args[0] as Camera.PreviewCallback
-                val clazz = originCallback.javaClass
-                val onPreviewFrame = clazz.getDeclaredMethod("onPreviewFrame",
-                    ByteArray::class.java,
-                    Camera::class.java)
-                magic.hook(onPreviewFrame, OnPreviewFrameHooker::class.java)
-            }
-        }
-    }
-
-    class OnPreviewFrameHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val originBuffer = callback.args[0] as ByteArray
-                NativeBridge.overwritePreviewBuffer(originBuffer)
-            }
-        }
-    }
-
-    class CameraAddCallbackBuffer : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-            }
-        }
-    }
-
-    class TakePictureHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                // 只hook jpeg拍照
-                callback.args[3]?.let { cb ->
-                    val clazz = (cb as Camera.PictureCallback).javaClass
-                    val shot = clazz.getDeclaredMethod("onPictureTaken",
-                        ByteArray::class.java, Camera::class.java)
-                    magic.hook(shot, ShotJPEGHooker::class.java)
-                }
-            }
-        }
-    }
-
-    class ShotJPEGHooker: XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val jpegBytes = callback.args[0] as ByteArray
-                NativeBridge.overwriteJPEGBytes(jpegBytes)
-            }
+            chain.proceed()
         }
     }
 }

@@ -7,8 +7,8 @@ plugins {
 // 版本控制变量
 def majorVersion = 1
 def minorVersion = 0
-def patchVersion = 0
-def versionCodeOffset = 57225 // 保持与旧版本兼容的偏移量
+def patchVersion = 1
+def versionCodeOffset = 0 // 保持与旧版本兼容的偏移量
 
 def getGitCommitHash = { ->
     try {
@@ -75,7 +75,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
 //            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}.${gitCommitHash}.apk"
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-rc2.apk"
+            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-api01.apk"
             output.outputFileName = fileName
         }
     }
@@ -114,8 +114,8 @@ android {
 
 afterEvaluate {
     if (!isExplicitNativeBuild) {
-        def jniLibFile = file("src/main/jniLibs/**/libcamera_magic.so")
-        if (!jniLibFile.exists()) {
+        def jniLibTree = fileTree(dir: "src/main/jniLibs", include: "**/libcamera_magic.so")
+        if (jniLibTree.isEmpty()) {
             println ">>> [警告] jniLibs 文件不存在， 无法快速编译 <<<"
             return
         }
@@ -168,8 +168,8 @@ android.applicationVariants.all { variant ->
 }
 
 dependencies {
-    compileOnly 'io.github.libxposed:api:100'
-    implementation 'io.github.libxposed:service:100-1.0.0'
+    compileOnly 'io.github.libxposed:api:101.0.0'
+    implementation 'io.github.libxposed:service:101.0.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0"
     implementation "com.google.accompanist:accompanist-permissions:0.37.3"

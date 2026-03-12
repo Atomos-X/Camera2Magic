@@ -13,18 +13,15 @@ import android.os.Handler
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
-import com.nothing.camera2magic.MagicEntry
+import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.hook.NativeBridge.needStartRenderer
-
 import com.nothing.camera2magic.hook.NativeBridge.needStopRenderer
 import com.nothing.camera2magic.hook.NativeBridge.registerSurfaceIfNew
 import com.nothing.camera2magic.hook.NativeBridge.releaseLastRegisteredSurface
+
 import com.nothing.camera2magic.utils.Dog
 
-import io.github.libxposed.api.XposedInterface
-import io.github.libxposed.api.XposedInterface.BeforeHookCallback
-import io.github.libxposed.api.XposedInterface.AfterHookCallback
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 
@@ -38,6 +35,7 @@ object Camera2Hooker {
     private var cameraState = WeakHashMap<CameraDevice, CameraState>()
     private var blackHole: Surface? = null
 
+    private val hookedStateCallbackClasses = mutableSetOf<Class<*>>()
     private fun destroyBlackHole() {
         blackHole?.release()
         blackHole = null
@@ -73,155 +71,154 @@ object Camera2Hooker {
     }
     private fun handleStateCallback(callback: CameraCaptureSession.StateCallback) {
         val clazz = callback.javaClass
-        val onConfigured = clazz.getDeclaredMethod("onConfigured",
-            CameraCaptureSession::class.java)
-        val onConfigureFailed = clazz.getDeclaredMethod("onConfigureFailed",
-            CameraCaptureSession::class.java)
-        magic.hook(onConfigured, OnConfiguredHooker::class.java)
-        magic.hook(onConfigureFailed, OnConfigureFailedHooker::class.java)
+        synchronized(hookedStateCallbackClasses) {
+            if (hookedStateCallbackClasses.add(clazz)) {
+                val onConfigured = clazz.getDeclaredMethod("onConfigured",
+                    CameraCaptureSession::class.java)
+                val onConfigureFailed = clazz.getDeclaredMethod("onConfigureFailed",
+                    CameraCaptureSession::class.java)
+                magic.hook(onConfigured).intercept { chain ->
+                    val session = chain.args[0] as CameraCaptureSession
+                    val camera = session.device
+                    val state = getCameraState(camera)
+                    registerSurfaceIfNew(state, true)
+                    needStartRenderer()
+                    chain.proceed()
+                }
+                magic.hook(onConfigureFailed).intercept { chain ->
+                    destroyBlackHole()
+                    activeCameraRef = null
+                    chain.proceed()
+                }
+            }
+        }
     }
 
-    private lateinit var magic: MagicEntry
+    private lateinit var magic: MagicHook
     @SuppressLint("PrivateApi")
-    fun initHooks(module: MagicEntry, param: PackageLoadedParam) {
+    fun initHooks(module: MagicHook, param: PackageReadyParam) {
         magic = module
         val classLoader = param.classLoader
-        val deviceImpl = classLoader.loadClass("android.hardware.camera2.impl.CameraDeviceImpl")
-
-        val createCaptureSessionNew = deviceImpl.getDeclaredMethod(
+        val deviceImplClass = classLoader.loadClass("android.hardware.camera2.impl.CameraDeviceImpl")
+        deviceImplClass.apply {
+            hookCreateCaptureSessionNew()
+            hookCreateCaptureSessionOld()
+            hookClose()
+        }
+        val builderClass = classLoader.loadClass("android.hardware.camera2.CaptureRequest\$Builder")
+        builderClass.apply {
+            hookAddTarget()
+            hookRemoveTarget()
+        }
+    }
+    private fun Class<*>.hookCreateCaptureSessionNew() {
+        val createCaptureSessionNew = getDeclaredMethod(
             "createCaptureSession",
             SessionConfiguration::class.java)
+        magic.hook(createCaptureSessionNew).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+            val camera = chain.thisObject as CameraDevice
+            activeCameraRef = WeakReference(camera)
 
-        magic.hook(createCaptureSessionNew, CreateCaptureSessionNewHooker::class.java)
+            val state = getCameraState(camera)
+            state.saveCameraInfo(camera)
 
-        val createCaptureSessionOld = deviceImpl.getDeclaredMethod(
+            destroyBlackHole()
+
+            val sessionConfiguration = chain.args[0] as SessionConfiguration
+
+            @SuppressLint("SoonBlockedPrivateApi")
+            val field = OutputConfiguration::class.java.getDeclaredField("mSurfaces")
+            field.isAccessible = true
+
+            sessionConfiguration.outputConfigurations.forEach { outputConfiguration ->
+                var modified = false
+                val surfaces = outputConfiguration.surfaces
+                val modifiedSurfaces = surfaces.mapTo(ArrayList<Surface>()) { origin ->
+                    val (width, height, format) = NativeBridge.getSurfaceInfo(origin)
+                    if (format == 1 && blackHole == null) {
+                        state.bindSurface(origin)
+                        @SuppressLint("Recycle")
+                        val surfaceTexture = SurfaceTexture(false)
+                            .apply { setDefaultBufferSize(1, 1) }
+                        modified = true
+                        return@mapTo Surface(surfaceTexture).also { blackHole = it }
+                    }
+                    origin
+                }
+                if (modified) field.set(outputConfiguration, modifiedSurfaces)
+            }
+            handleStateCallback(sessionConfiguration.stateCallback)
+            chain.proceed()
+        }
+    }
+    private fun Class<*>.hookCreateCaptureSessionOld() {
+        val createCaptureSession = getDeclaredMethod(
             "createCaptureSession",
             List::class.java,
             CameraCaptureSession.StateCallback::class.java,
             Handler::class.java)
-        magic.hook(createCaptureSessionOld, CreateCaptureSessionOldHooker::class.java)
+        magic.hook(createCaptureSession).intercept { chain ->
+            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
 
-        val closeMethod = deviceImpl.getDeclaredMethod("close")
-        magic.hook(closeMethod, CloseHooker::class.java)
-    }
+            Dog.i(TAG, "Called func parameterTypes = List<Surface>", true)
+            val camera = chain.thisObject as CameraDevice
+            val state = getCameraState(camera)
 
-    class CreateCaptureSessionNewHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                if (!SourceManager.isReadyForHook()) return
-                val camera = callback.thisObject as CameraDevice
-                activeCameraRef = WeakReference(camera)
+            @Suppress("UNCHECKED_CAST")
+            val surfaces = chain.args[0] as List<Surface>
 
-                val state = getCameraState(camera)
-                state.saveCameraInfo(camera)
-                /*
-                // 抢先成为surface的生产者，对于大部分社交类应用（单流）足够了
-                val surfaces = getSurfaceListFrom(callback.args[0])
-                val targetSurface = getTargetFrom(surfaces) ?: return
-                state.bindSurface(targetSurface)
-                registerSurfaceIfNew(state, true)
-                needStartRenderer()
-                // 相机服务只会报错，这里不要阻断；
-                */
-
-                // 黑洞可能持有surface，先释放资源
-                destroyBlackHole()
-
-                val sessionConfiguration = callback.args[0] as SessionConfiguration
-
-                @SuppressLint("SoonBlockedPrivateApi")
-                val field = OutputConfiguration::class.java.getDeclaredField("mSurfaces")
-                field.isAccessible = true
-
-                sessionConfiguration.outputConfigurations.forEach { outputConfiguration ->
-                    var modified = false
-                    val surfaces = outputConfiguration.surfaces
-                    val modifiedSurfaces = surfaces.mapTo(ArrayList<Surface>()) { origin ->
-                        val (width, height, format) = NativeBridge.getSurfaceInfo(origin)
-                        if (format == 1 && blackHole == null) {
-                            state.bindSurface(origin)
-                            @SuppressLint("Recycle")
-                            val surfaceTexture = SurfaceTexture(false)
-                                .apply { setDefaultBufferSize(1, 1) }
-                            modified = true
-                            return@mapTo Surface(surfaceTexture).also { blackHole = it }
-                        }
-                        origin
-                    }
-                    if (modified) field.set(outputConfiguration, modifiedSurfaces)
+            val newList = surfaces.mapTo(ArrayList<Surface>()) { origin ->
+                val (width, height, format) = NativeBridge.getSurfaceInfo(origin)
+                if (format == 1 && blackHole == null) {
+                    state.bindSurface(origin)
+                    @SuppressLint("Recycle")
+                    val st = SurfaceTexture(false)
+                        .apply { setDefaultBufferSize(width, height) }
+                    return@mapTo Surface(st).also { blackHole = it }
                 }
-
-                handleStateCallback(sessionConfiguration.stateCallback)
+                origin
             }
+            val stateCallback = chain.args[1] as CameraCaptureSession.StateCallback
+            handleStateCallback(stateCallback)
+            val newArgs = chain.args.toTypedArray()
+            newArgs[0] = newList
+            chain.proceed(newArgs)
         }
     }
-
-    class CreateCaptureSessionOldHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val camera = callback.thisObject as CameraDevice
-                val state = getCameraState(camera)
-
-                @Suppress("UNCHECKED_CAST")
-                val surfaces = callback.args[0] as List<Surface>
-
-                val newList = surfaces.mapTo(ArrayList<Surface>()) { origin ->
-                    val (_, _, format) = NativeBridge.getSurfaceInfo(origin)
-                    if (format == 1 && blackHole == null) {
-                        state.bindSurface(origin)
-                        @SuppressLint("Recycle")
-                        val st = SurfaceTexture(false)
-                            .apply { setDefaultBufferSize(1, 1) }
-                        return@mapTo Surface(st).also { blackHole = it }
-                    }
-                    origin
-                }
-                callback.args[0] = newList
-                val stateCallback = callback.args[1] as CameraCaptureSession.StateCallback
-                handleStateCallback(stateCallback)
-            }
-        }
-    }
-
-    class OnConfiguredHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                val session = callback.args[0] as CameraCaptureSession
-                val camera = session.device
-                val state = getCameraState(camera)
-                registerSurfaceIfNew(state, true)
-                needStartRenderer()
-            }
-        }
-    }
-
-    class OnConfigureFailedHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun before(callback: BeforeHookCallback) {
-                Dog.e(TAG, "createCaptureSession failed.", null, true)
+    private fun Class<*>.hookClose() {
+        val close = getDeclaredMethod("close")
+        magic.hook(close).intercept { chain ->
+            chain.proceed()
+            val activeCamera = activeCameraRef?.get()
+            val closingCamera = chain.thisObject as CameraDevice
+            if (activeCamera != null && closingCamera === activeCamera) {
+                needStopRenderer()
+                releaseLastRegisteredSurface()
                 destroyBlackHole()
                 activeCameraRef = null
             }
         }
     }
 
-    class CloseHooker : XposedInterface.Hooker {
-        companion object {
-            @JvmStatic
-            fun after(callback: AfterHookCallback) {
-                val activeCamera = activeCameraRef?.get()
-                val closingCamera = callback.thisObject as CameraDevice
-                if (activeCamera != null && closingCamera === activeCamera) {
-                    needStopRenderer()
-                    releaseLastRegisteredSurface()
-                    destroyBlackHole()
-                    activeCameraRef = null
-                }
+    private fun Class<*>.hookAddTarget() {
+        val addTarget = getDeclaredMethod("addTarget", Surface::class.java)
+        magic.hook(addTarget).intercept { chain ->
+            if (!SourceManager.isReadyForHook() || blackHole == null) {
+                return@intercept chain.proceed()
             }
+            chain.proceed(arrayOf(blackHole))
+        }
+    }
+
+    private fun Class<*>.hookRemoveTarget() {
+        val removeTarget = getDeclaredMethod("removeTarget", Surface::class.java)
+        magic.hook(removeTarget).intercept { chain ->
+            if (SourceManager.isReadyForHook()) destroyBlackHole()
+            chain.proceed()
         }
     }
 }
+
+
+
