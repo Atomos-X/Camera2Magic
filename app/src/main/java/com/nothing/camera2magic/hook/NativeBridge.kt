@@ -64,7 +64,7 @@ object NativeBridge {
     @JvmStatic
     external fun overwritePreviewBuffer(originBuffer: ByteArray)
     @JvmStatic
-    external fun overwriteJPEGBytes(jpegBytes: ByteArray, quality: Int = 90)
+    external fun overwriteJPEGBytes(quality: Int = 90): ByteArray
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()

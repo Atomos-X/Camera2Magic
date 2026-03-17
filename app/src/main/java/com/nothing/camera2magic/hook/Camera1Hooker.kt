@@ -9,11 +9,15 @@ import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicHook
+import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.lang.ref.WeakReference
 import java.lang.reflect.Proxy
+import java.util.Timer
 import java.util.WeakHashMap
+import kotlin.concurrent.schedule
+
 object Camera1Hooker {
     private const val TAG = "[CAM1]"
 
@@ -157,6 +161,7 @@ object Camera1Hooker {
             if (isPreviewing(camera)) {
                 NativeBridge.setDisplayOrientation(displayOrientation)
             }
+            chain.proceed()
         }
     }
     private fun Class<*>.hookStartPreview() {
@@ -182,6 +187,7 @@ object Camera1Hooker {
             if (activeCamera != null && camera === activeCamera) {
                 NativeBridge.needStopRenderer()
             }
+            chain.proceed()
         }
     }
     private fun Class<*>.hookRelease() {
@@ -197,6 +203,7 @@ object Camera1Hooker {
                 destroyBlackHole()
                 activeCameraRef = null
             }
+            chain.proceed()
         }
     }
 
@@ -236,7 +243,6 @@ object Camera1Hooker {
         // TODO:
     }
 
-
     private fun Class<*>.hookTakePicture() {
         val takePicture = getDeclaredMethod(
             "takePicture",
@@ -254,9 +260,9 @@ object Camera1Hooker {
                         val onPictureTaken = clazz.getDeclaredMethod("onPictureTaken",
                             ByteArray::class.java, Camera::class.java)
                         magic.hook(onPictureTaken).intercept { shot ->
-                            val jpegBytes = shot.args[0] as ByteArray
-                            NativeBridge.overwriteJPEGBytes(jpegBytes)
-                            shot.proceed()
+                            val newArgs = shot.args.toTypedArray()
+                            newArgs[0] = NativeBridge.overwriteJPEGBytes()
+                            shot.proceed(newArgs)
                         }
                     }
                 }

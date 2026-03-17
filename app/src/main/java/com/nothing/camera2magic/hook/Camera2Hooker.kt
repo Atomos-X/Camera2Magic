@@ -179,8 +179,10 @@ object Camera2Hooker {
                 }
                 origin
             }
+
             val stateCallback = chain.args[1] as CameraCaptureSession.StateCallback
             handleStateCallback(stateCallback)
+
             val newArgs = chain.args.toTypedArray()
             newArgs[0] = newList
             chain.proceed(newArgs)
