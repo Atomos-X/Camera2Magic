@@ -75,7 +75,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
 //            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}.${gitCommitHash}.apk"
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-api01.apk"
+            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-api101.apk"
             output.outputFileName = fileName
         }
     }
