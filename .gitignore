@@ -12,3 +12,5 @@ local.properties
 !/app/src/main/jniLib
 .DS_Store
 /app/src/main/cpp
+app/modern
+app/legacy

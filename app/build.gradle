@@ -34,6 +34,13 @@ def startTasks = gradle.startParameter.taskNames
 def isExplicitNativeBuild = startTasks.any { it.contains("buildNative") }
 
 android {
+    flavorDimensions.add("api")
+
+    productFlavors {
+        create("legacy") { dimension = "api" }
+        create("modern") { dimension = "api" }
+    }
+
     namespace 'com.nothing.camera2magic'
     compileSdk {
         version = release(36)
@@ -168,8 +175,9 @@ android.applicationVariants.all { variant ->
 }
 
 dependencies {
-    compileOnly 'io.github.libxposed:api:101.0.0'
-    implementation 'io.github.libxposed:service:101.0.0'
+    legacyCompileOnly "de.robv.android.xposed:api:82"
+    modernCompileOnly 'io.github.libxposed:api:101.0.0'
+    modernImplementation 'io.github.libxposed:service:101.0.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0"
     implementation "com.google.accompanist:accompanist-permissions:0.37.3"

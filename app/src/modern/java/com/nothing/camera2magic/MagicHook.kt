@@ -11,18 +11,6 @@ import com.nothing.camera2magic.hook.SourceManager
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
-
-object GlobalState {
-    @Volatile
-    lateinit var appContext: Context
-    @Volatile
-    lateinit var packageName: String
-    @Volatile
-    var activityCount = 0
-}
-
-private const val TAG = "[Entry]"
-
 class MagicHook : XposedModule() {
 
     companion object {

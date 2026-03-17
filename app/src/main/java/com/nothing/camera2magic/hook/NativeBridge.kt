@@ -42,7 +42,6 @@ object NativeBridge {
             callback.onPreviewFrame(buffer, camera)
         }
     }
-
     @JvmStatic
     external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean)
     @JvmStatic
@@ -65,6 +64,7 @@ object NativeBridge {
     external fun overwritePreviewBuffer(originBuffer: ByteArray)
     @JvmStatic
     external fun overwriteJPEGBytes(quality: Int = 90): ByteArray
+
     fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
@@ -76,6 +76,7 @@ object NativeBridge {
             }
         }
     }
+
     fun releaseLastRegisteredSurface() {
         synchronized(surfaceLock) {
             lastRegisteredSurface = null
