@@ -10,6 +10,6 @@
             android:value="A Virtual Camera, support Android 10+ " />
         <meta-data
             android:name="xposedminversion"
-            android:value="89" />
+            android:value="93" />
     </application>
 </manifest>

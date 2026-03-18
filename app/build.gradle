@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// 版本控制变量
+// 版本控制变量 version for camera3
 def majorVersion = 1
 def minorVersion = 0
 def patchVersion = 1
@@ -81,8 +81,8 @@ android {
     // 自定义生成的 APK 文件名
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-//            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}.${gitCommitHash}.apk"
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-api101.apk"
+            def flavor = variant.flavorName
+            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${flavor}.apk"
             output.outputFileName = fileName
         }
     }
@@ -115,13 +115,13 @@ android {
     }
 
     packaging {
-        jniLibs.pickFirsts.add("**/libcamera_magic.so")
+        jniLibs.pickFirsts.add("**/libcamera3.so")
     }
 }
 
 afterEvaluate {
     if (!isExplicitNativeBuild) {
-        def jniLibTree = fileTree(dir: "src/main/jniLibs", include: "**/libcamera_magic.so")
+        def jniLibTree = fileTree(dir: "src/main/jniLibs", include: "**/libcamera3.so")
         if (jniLibTree.isEmpty()) {
             println ">>> [警告] jniLibs 文件不存在， 无法快速编译 <<<"
             return
@@ -138,40 +138,33 @@ afterEvaluate {
     }
 }
 
-android.applicationVariants.all { variant ->
+tasks.register("buildNative", Copy) {
+    group = "native"
+    description = "编译 C++ 产物并同步到 jniLibs (基于 Modern Release)"
 
-    def variantName = variant.name.capitalize() // "Debug" 或 "Release"
-    def copyTaskName = "buildNative${variantName}"
-    def stripTaskName = "strip${variantName}DebugSymbols"
-    def packageTaskName = "package${variantName}"
+    def targetVariant = "modernRelease"
+    def stripTaskName = "stripModernReleaseDebugSymbols"
 
-    tasks.register("buildNative${variantName}", Copy) {
+    dependsOn stripTaskName
+    outputs.upToDateWhen { false }
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
-        doFirst {
-            delete("src/main/jniLibs/**/*.so")
-            delete("release/")
-            delete(".cxx")
-            println ">>> 已清理手动生成的 jniLibs 目录 <<<"
-        }
-
-        group = "native"
-        description = "为 ${variant.name} 编译并同步 C++ 产物"
-        // 动态匹配当前变体的路径
-        println ">>> 模式: Native 构建 (正在编译 C++ 并更新 jniLibs) <<<"
-        dependsOn stripTaskName
-        outputs.upToDateWhen { false }
-        duplicatesStrategy = DuplicatesStrategy.INCLUDE
-
-        def startDir = layout.buildDirectory.dir("intermediates/stripped_native_libs/${variant.name}/${stripTaskName}/out/lib")
-
-        from(startDir) {
-            include("**/libcamera_magic.so")
-        }
-
-        includeEmptyDirs = false
-
-        into("src/main/jniLibs")
+    doFirst {
+        delete("src/main/jniLibs")
+        delete("release/")
+        delete(".cxx")
+        println ">>> 已清理旧的 jniLibs 目录和 C++ 缓存 <<<"
+        println ">>> 模式: Native 构建 (基于 ${targetVariant} 编译 C++ 并更新 jniLibs) <<<"
     }
+
+    def startDir = layout.buildDirectory.dir("intermediates/stripped_native_libs/${targetVariant}/${stripTaskName}/out/lib")
+
+    from(startDir) {
+        include("**/libcamera3.so")
+    }
+
+    includeEmptyDirs = false
+    into("src/main/jniLibs")
 }
 
 dependencies {

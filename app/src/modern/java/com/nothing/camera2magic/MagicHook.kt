@@ -13,14 +13,17 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
 class MagicHook : XposedModule() {
 
+    init {
+        System.loadLibrary("camera3")
+    }
+
     companion object {
-        const val TAG = "[MagicHook]"
+        private const val TAG = "[MagicHook]"
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
         if (!param.isFirstPackage) return
         GlobalState.packageName = param.packageName
-        System.loadLibrary("camera_magic")
         val remotePrefs = getRemotePreferences("camera_magic_config")
         SourceManager.init(remotePrefs)
         hookAttach()
@@ -41,7 +44,7 @@ class MagicHook : XposedModule() {
     private fun hookActivity() {
         val start = Activity::class.java.getDeclaredMethod("onStart")
         hook(start).intercept { chain ->
-            chain.proceed()
+            val result = chain.proceed()
             val activity = chain.thisObject as Activity
             GlobalState.activityCount ++
             if (GlobalState.activityCount == 1) {
@@ -51,6 +54,7 @@ class MagicHook : XposedModule() {
                     Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
                 }
             }
+            return@intercept result
         }
 
         val stop = Activity::class.java.getDeclaredMethod("onStop")
