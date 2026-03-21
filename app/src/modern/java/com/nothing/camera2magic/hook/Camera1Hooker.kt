@@ -14,6 +14,7 @@ import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.lang.ref.WeakReference
 import java.lang.reflect.Proxy
+import java.util.Collections
 import java.util.Timer
 import java.util.WeakHashMap
 import kotlin.concurrent.schedule
@@ -49,7 +50,8 @@ object Camera1Hooker {
     }
 
     private lateinit var magic: MagicHook
-    private val hookedCallbackClasses = mutableSetOf<Class<*>>()
+    private val hookedClasses = Collections.synchronizedSet(
+        Collections.newSetFromMap(WeakHashMap<Class<*>, Boolean>()))
 
     fun initHooks(module: MagicHook, param: PackageReadyParam) {
         magic = module
@@ -107,7 +109,9 @@ object Camera1Hooker {
         }
     }
     private fun Class<*>.hookSetPreviewTexture() {
-        val setPreviewTexture = getDeclaredMethod("setPreviewTexture", SurfaceTexture::class.java)
+        val setPreviewTexture = getDeclaredMethod("setPreviewTexture",
+            SurfaceTexture::class.java)
+
         magic.hook(setPreviewTexture).intercept { chain ->
             if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
             val camera = chain.thisObject as Camera
@@ -126,9 +130,9 @@ object Camera1Hooker {
         val setPreviewDisplay = getDeclaredMethod(
             "setPreviewDisplay",
             SurfaceHolder::class.java)
+
         magic.hook(setPreviewDisplay).intercept { chain ->
             if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
-
             pushMode = true
             val camera = chain.thisObject as Camera
             val holder = chain.args[0] as SurfaceHolder
@@ -211,16 +215,15 @@ object Camera1Hooker {
         if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
         val originCallback = chain.args[0] as? Camera.PreviewCallback ?: return@intercept chain.proceed()
         val clazz = originCallback.javaClass
-        synchronized(hookedCallbackClasses) {
-            if (hookedCallbackClasses.add(clazz)) {
-                val onPreviewFrame = clazz.getDeclaredMethod("onPreviewFrame",
-                    ByteArray::class.java,
-                    Camera::class.java)
-                magic.hook(onPreviewFrame).intercept { frameChain ->
-                    val originBuffer = frameChain.args[0] as ByteArray
-                    NativeBridge.overwritePreviewBuffer(originBuffer)
-                    frameChain.proceed()
-                }
+        if (hookedClasses.add(clazz)) {
+            val onPreviewFrame = clazz.getDeclaredMethod(
+                "onPreviewFrame",
+                ByteArray::class.java,
+                Camera::class.java)
+            magic.hook(onPreviewFrame).intercept { frame ->
+                val originBuffer = frame.args[0] as ByteArray
+                NativeBridge.overwritePreviewBuffer(originBuffer)
+                frame.proceed()
             }
         }
         chain.proceed()
@@ -255,15 +258,13 @@ object Camera1Hooker {
             if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
             chain.args[3]?.let { cb ->
                 val clazz = (cb as Camera.PictureCallback).javaClass
-                synchronized(hookedCallbackClasses) {
-                    if (hookedCallbackClasses.add(clazz)) {
-                        val onPictureTaken = clazz.getDeclaredMethod("onPictureTaken",
-                            ByteArray::class.java, Camera::class.java)
-                        magic.hook(onPictureTaken).intercept { shot ->
-                            val newArgs = shot.args.toTypedArray()
-                            newArgs[0] = NativeBridge.overwriteJPEGBytes()
-                            shot.proceed(newArgs)
-                        }
+                if (hookedClasses.add(clazz)) {
+                    val onPictureTaken = clazz.getDeclaredMethod("onPictureTaken",
+                        ByteArray::class.java, Camera::class.java)
+                    magic.hook(onPictureTaken).intercept { shot ->
+                        val newArgs = shot.args.toTypedArray()
+                        newArgs[0] = NativeBridge.overwriteJPEGBytes()
+                        shot.proceed(newArgs)
                     }
                 }
             }

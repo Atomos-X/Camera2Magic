@@ -31,20 +31,6 @@ enum class MediaType(val value: Int, val mimeType: String) {
     }
 }
 
-/**
- * 存储配置的 Repository, 使用 LSPosed Modern Api 在模块和应用之间共享数据
- * @param xposedService XposedService(api 100)
- * @param prefs 本地数据
- * @param moduleEnabled 是否启用模块
- * @param playSound 是否播放声音
- * @param enableLog 是否启用日志
- * @param injectMenu 是否注入菜单
- * @param manuallyRotate 是否手动旋转
- * @param mediaSource 媒体源; 0: Local, 1: Network
- * @param localMediaType 本地媒体类型，仅在 `mediaSource = 0` 时有效; 0: MagicVideo, 1: MagicImage
- * @param videoId 视频 ID
- * @param imageId 图片 ID
- */
 class ConfigRepository(private val prefs: SharedPreferences) {
 
     private var xposedService: XposedService? = null

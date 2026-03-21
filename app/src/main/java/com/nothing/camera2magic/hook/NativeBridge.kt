@@ -47,6 +47,8 @@ object NativeBridge {
     @JvmStatic
     external fun registerSurface(cameraState: CameraState)
     @JvmStatic
+    external fun fixSurfaceGeometry(surface: Surface, width: Int, height: Int)
+    @JvmStatic
     external fun setDisplayOrientation(orientation: Int)
     @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray

@@ -8,6 +8,7 @@ import android.widget.Toast
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager
+import com.nothing.camera2magic.hook.WebRTCHooker
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
@@ -30,6 +31,7 @@ class MagicHook : XposedModule() {
         hookActivity()
         Camera1Hooker.initHooks(this, param)
         Camera2Hooker.initHooks(this, param)
+        WebRTCHooker.initHooks(this, param)
     }
 
     @SuppressLint("DiscouragedPrivateApi")

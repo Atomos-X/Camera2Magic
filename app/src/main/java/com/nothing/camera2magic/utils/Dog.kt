@@ -10,17 +10,17 @@ object Dog {
 
     fun i(tag: String? = null, message: String, enabled: Boolean = false) {
         if (!enabled) return
-        Log.i("$PREFIX $tag", message)
+        Log.i("$PREFIX$tag", message)
     }
 
     fun w(tag: String? = null, message: String, enabled: Boolean = false) {
         if (!enabled) return
-        Log.w("$PREFIX $tag", message)
+        Log.w("$PREFIX$tag", message)
     }
 
     fun e(tag: String? = null, message: String, throwable: Throwable? = null, enabled: Boolean = false) {
         if (!enabled) return
-        if (throwable != null) Log.e("$PREFIX $tag", message, throwable)
-        else Log.e("$PREFIX $tag", message)
+        if (throwable != null) Log.e("$PREFIX$tag", message, throwable)
+        else Log.e("$PREFIX$tag", message)
     }
 }
