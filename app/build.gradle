@@ -82,7 +82,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             def flavor = variant.flavorName
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${flavor}.apk"
+            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${flavor}-api.apk"
             output.outputFileName = fileName
         }
     }
