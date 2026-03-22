@@ -6,10 +6,10 @@ import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
@@ -31,10 +31,11 @@ object Camera2Hooker {
 
     private val CameraDevice?.shortId : String
         get() = if (this == null) "null" else "@0x${Integer.toHexString(System.identityHashCode(this))}"
-
+    private lateinit var magic: MagicHook
+    private val hookedClasses = Collections.synchronizedSet(
+        Collections.newSetFromMap(WeakHashMap<Class<*>, Boolean>()))
     private var activeCameraRef: WeakReference<Any>? = null
     private var cameraState = WeakHashMap<CameraDevice, CameraState>()
-    private val hookedStateCallbackClasses = mutableSetOf<Class<*>>()
     private fun getCameraState(camera: CameraDevice): CameraState {
         return synchronized(cameraState) {
             cameraState.getOrPut(camera) { CameraState() }
@@ -64,59 +65,32 @@ object Camera2Hooker {
         this.previewHeight = height
         this.surface = surface
     }
-
-    private fun handleSessionRequests(session: CameraCaptureSession) {
-        val clazz = session.javaClass
-        val setRepeatRequest = clazz.getDeclaredMethod("setRepeatingRequest",
-            CaptureRequest::class.java,
-            CameraCaptureSession.CaptureCallback::class.java, Handler::class.java)
-        magic.hook(setRepeatRequest).intercept { chain ->
-            val request = chain.args[0] as CaptureRequest
-            val originCallback = chain.args[1] as? CameraCaptureSession.CaptureCallback
-                ?: return@intercept chain.proceed()
-            val wrapperCallback = object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest,
-                    timestamp: Long, frameNumber: Long) {
-                    originCallback.onCaptureStarted(session, request, timestamp, frameNumber)
-                }
-            }
-            val newArgs = chain.args.toTypedArray()
-            newArgs[1] = wrapperCallback
-            chain.proceed(newArgs)
-        }
-    }
-
     private fun handleStateCallback(callback: CameraCaptureSession.StateCallback) {
         val clazz = callback.javaClass
-        synchronized(hookedStateCallbackClasses) {
-            if (hookedStateCallbackClasses.add(clazz)) {
-                val onConfigured = clazz.getDeclaredMethod("onConfigured",
-                    CameraCaptureSession::class.java)
+        if (hookedClasses.add(clazz)) {
+            val onConfigured = clazz.getDeclaredMethod("onConfigured",
+                CameraCaptureSession::class.java)
 
-                magic.hook(onConfigured).intercept { chain ->
-                    val session = chain.args[0] as CameraCaptureSession
-                    handleSessionRequests(session)
-                    val camera = session.device
-                    val state = getCameraState(camera)
-                    registerSurfaceIfNew(state, true)
-                    needStartRenderer()
-                    chain.proceed()
-                }
-                val onConfigureFailed = clazz.getDeclaredMethod("onConfigureFailed",
-                    CameraCaptureSession::class.java)
+            magic.hook(onConfigured).intercept { chain ->
+                val session = chain.args[0] as CameraCaptureSession
+                val camera = session.device
+                val state = getCameraState(camera)
+                registerSurfaceIfNew(state, true)
+                Handler(Looper.getMainLooper()).post { needStartRenderer() }
+                chain.proceed()
+            }
 
-                magic.hook(onConfigureFailed).intercept { chain ->
-                    Dog.e(TAG, "CameraCaptureSession.StateCallback: onConfigureFailed.", null, true)
-                    BlackHoleMapper.clearAll()
-                    activeCameraRef = null
-                    chain.proceed()
-                }
+            val onConfigureFailed = clazz.getDeclaredMethod("onConfigureFailed",
+                CameraCaptureSession::class.java)
+
+            magic.hook(onConfigureFailed).intercept { chain ->
+                Dog.e(TAG, "CameraCaptureSession.StateCallback: onConfigureFailed.", null, true)
+                BlackHoleMapper.clearAll()
+                activeCameraRef = null
+                chain.proceed()
             }
         }
     }
-    private lateinit var magic: MagicHook
-    private val hookedClasses = Collections.synchronizedSet(
-        Collections.newSetFromMap(WeakHashMap<Class<*>, Boolean>()))
     @SuppressLint("PrivateApi")
     fun initHooks(module: MagicHook, param: PackageReadyParam) {
         magic = module
@@ -132,7 +106,6 @@ object Camera2Hooker {
             hookAddTarget()
             hookRemoveTarget()
         }
-
     }
 
     private fun Class<*>.hookCreateCaptureSessionWithConfiguration() {
@@ -146,7 +119,6 @@ object Camera2Hooker {
 
             val state = getCameraState(camera)
             state.saveCameraInfo(camera)
-
             BlackHoleMapper.clearAll()
 
             val sessionConfiguration = chain.args[0] as SessionConfiguration
@@ -166,7 +138,6 @@ object Camera2Hooker {
                     }
                     origin
                 }
-                Dog.w(TAG, "find ${modifiedSurfaces.size} in outputConfiguration.surfaces.", true)
                 if (modified) field.set(outputConfiguration, modifiedSurfaces)
             }
             handleStateCallback(sessionConfiguration.stateCallback)
@@ -187,11 +158,9 @@ object Camera2Hooker {
             BlackHoleMapper.clearAll()
             @Suppress("UNCHECKED_CAST")
             val surfaces = chain.args[0] as List<Surface>
-            Dog.w(TAG, "find ${surfaces.size} in List<Surface>.",true)
             val newList = surfaces.mapTo(ArrayList()) { origin ->
                 val (width, height, format) = NativeBridge.getSurfaceInfo(origin)
                 if (format == 1) {
-                    NativeBridge.fixSurfaceGeometry(origin, width, height)
                     state.bindSurface(origin)
                     return@mapTo BlackHoleMapper.createBlackHole(origin)
                 }
@@ -210,15 +179,17 @@ object Camera2Hooker {
     private fun Class<*>.hookClose() {
         val close = getDeclaredMethod("close")
         magic.hook(close).intercept { chain ->
-            chain.proceed()
             val activeCamera = activeCameraRef?.get()
             val closingCamera = chain.thisObject as CameraDevice
+
             if (activeCamera != null && closingCamera === activeCamera) {
-                needStopRenderer()
+                Dog.i(TAG, "camera[${closingCamera.shortId}] close.", true)
+                Handler(Looper.getMainLooper()).post { needStopRenderer() }
                 releaseLastRegisteredSurface()
                 BlackHoleMapper.clearAll()
                 activeCameraRef = null
             }
+            chain.proceed()
         }
     }
 
