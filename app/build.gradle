@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -165,6 +167,12 @@ tasks.register("buildNative", Copy) {
 
     includeEmptyDirs = false
     into("src/main/jniLibs")
+}
+
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        freeCompilerArgs += ["-Xcontext-receivers"]
+    }
 }
 
 dependencies {

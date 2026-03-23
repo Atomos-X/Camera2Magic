@@ -1,7 +1,6 @@
 package com.nothing.camera2magic.hook
 
 import android.graphics.ImageFormat
-import android.graphics.SurfaceTexture
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
@@ -11,7 +10,6 @@ import java.util.WeakHashMap
 
 data class BlackHole(
     val identityId: Int,
-    val surface: Surface,
     val reader: ImageReader
 )
 private const val TAG = "[BlackHole]"
@@ -29,15 +27,15 @@ object BlackHoleMapper {
                     val image = r.acquireLatestImage()
                     image?.close()
                 }.onFailure { exception ->
-                    Dog.e(TAG, "acquireLatestImage Failed: ${exception.message}", exception, true)
+                    Dog.e(TAG, "${exception.message}", null, SourceManager.enableLog)
                 }
             }, camera3Handler)
-            BlackHole(id, reader.surface, reader)
-        }.surface
+            BlackHole(id, reader)
+        }.reader.surface
     }
 
     fun getBlackHole(origin: Surface): Surface? {
-        return oabMap[origin]?.surface
+        return oabMap[origin]?.reader?.surface
     }
 
     fun clearAll() {

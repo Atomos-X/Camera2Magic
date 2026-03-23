@@ -2,9 +2,6 @@ package com.nothing.camera2magic.utils
 import android.util.Log
 import android.view.Surface
 
-val Surface?.shortId : String
-    get() = if (this == null) "null" else "@0x${Integer.toHexString(System.identityHashCode(this))}"
-
 object Dog {
     private const val PREFIX = "[VCX]"
 

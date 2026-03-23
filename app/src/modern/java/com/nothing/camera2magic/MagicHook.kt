@@ -9,6 +9,7 @@ import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager
 import com.nothing.camera2magic.hook.WebRTCHooker
+import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
@@ -27,24 +28,29 @@ class MagicHook : XposedModule() {
         GlobalState.packageName = param.packageName
         val remotePrefs = getRemotePreferences("camera_magic_config")
         SourceManager.init(remotePrefs)
-        hookAttach()
-        hookActivity()
-        Camera1Hooker.initHooks(this, param)
-        Camera2Hooker.initHooks(this, param)
-        WebRTCHooker.initHooks(this, param)
-    }
 
-    @SuppressLint("DiscouragedPrivateApi")
-    private fun hookAttach() {
-        val attach = Application::class.java.getDeclaredMethod("attach", Context::class.java)
+        Application::class.java.apply { hookAttach() }
+
+        Activity::class.java.apply {
+            hookOnStart()
+            hookOnStop()
+        }
+
+        Camera1Hooker(this, param)
+        Camera2Hooker(this, param)
+        WebRTCHooker(this, param)
+    }
+    private fun Class<*>.hookAttach() {
+        @SuppressLint("DiscouragedPrivateApi")
+        val attach = getDeclaredMethod("attach", Context::class.java)
         hook(attach).intercept { chain ->
             GlobalState.appContext = chain.args[0] as Context
             chain.proceed()
         }
     }
 
-    private fun hookActivity() {
-        val start = Activity::class.java.getDeclaredMethod("onStart")
+    private fun Class<*>.hookOnStart() {
+        val start = getDeclaredMethod("onStart")
         hook(start).intercept { chain ->
             val result = chain.proceed()
             val activity = chain.thisObject as Activity
@@ -58,11 +64,14 @@ class MagicHook : XposedModule() {
             }
             return@intercept result
         }
+    }
 
-        val stop = Activity::class.java.getDeclaredMethod("onStop")
+    private fun Class<*>.hookOnStop() {
+        val stop = getDeclaredMethod("onStop")
         hook(stop).intercept { chain ->
-            chain.proceed()
+            val result = chain.proceed()
             GlobalState.activityCount--
+            return@intercept result
         }
     }
 }

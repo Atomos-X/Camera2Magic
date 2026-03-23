@@ -5,9 +5,7 @@ package com.nothing.camera2magic.hook
 import android.graphics.Bitmap
 import android.hardware.Camera
 import android.view.Surface
-import com.nothing.camera2magic.utils.Dog
 import java.lang.ref.WeakReference
-import java.util.WeakHashMap
 
 object NativeBridge {
     private const val TAG = "[Bridge]"
