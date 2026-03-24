@@ -42,6 +42,15 @@ object NativeBridge {
     }
     @JvmStatic
     external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean)
+
+    @JvmStatic
+    external fun updateCameraBaseData(api: Int, facingFront: Boolean,
+                                      sensorOrientation: Int, displayOrientation: Int)
+    @JvmStatic
+    external fun updateCameraExtendedData(surface: Surface,
+                                          isActive: Boolean, format: Int,
+                                          previewWidth: Int, previewHeight: Int,
+                                          pictureWidth: Int, pictureHeight: Int)
     @JvmStatic
     external fun registerSurface(cameraState: CameraState)
     @JvmStatic

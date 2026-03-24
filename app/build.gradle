@@ -169,12 +169,6 @@ tasks.register("buildNative", Copy) {
     into("src/main/jniLibs")
 }
 
-tasks.withType(KotlinCompile).configureEach {
-    kotlinOptions {
-        freeCompilerArgs += ["-Xcontext-receivers"]
-    }
-}
-
 dependencies {
     legacyCompileOnly "de.robv.android.xposed:api:82"
     modernCompileOnly 'io.github.libxposed:api:101.0.0'
