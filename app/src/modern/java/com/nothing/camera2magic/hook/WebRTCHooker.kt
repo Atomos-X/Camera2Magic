@@ -6,10 +6,9 @@ import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.util.Collections
 import java.util.WeakHashMap
-
-class WebRTCHooker(val magic: MagicHook, val param: PackageReadyParam) : HookManager {
+class WebRTCHooker(val magic: MagicHook, param: PackageReadyParam) : HookManager {
     override val hookedClasses: MutableSet<Class<*>> = Collections.synchronizedSet(
-        Collections.newSetFromMap(WeakHashMap<Class<*>, Boolean>()))
+        Collections.newSetFromMap(WeakHashMap()))
     companion object {
         private const val TAG = "[WebRTC]"
         private val ROTATION_REGEX = Regex("""(\d+)x(\d+).*rotation\s+(\d+)""")
@@ -27,8 +26,6 @@ class WebRTCHooker(val magic: MagicHook, val param: PackageReadyParam) : HookMan
             if (tag == "Camera2Session" && msg.contains("Stop Camera2 session", ignoreCase = true)) {
                 manualRotation = 0
                 NativeBridge.updateManualRotation(0)
-                NativeBridge.needStopRenderer()
-                NativeBridge.releaseLastRegisteredSurface()
             }
             chain.proceed()
         }
@@ -53,7 +50,7 @@ class WebRTCHooker(val magic: MagicHook, val param: PackageReadyParam) : HookMan
             if (manualRotation != rotation) {
                 Dog.i(TAG, "WebRTC set rotation: $rotation", SourceManager.enableLog)
                 manualRotation = rotation
-                NativeBridge.updateManualRotation(90)
+                NativeBridge.updateManualRotation(rotation)
             }
         }
     }

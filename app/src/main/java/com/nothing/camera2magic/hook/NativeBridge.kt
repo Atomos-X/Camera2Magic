@@ -2,20 +2,16 @@
 
 package com.nothing.camera2magic.hook
 
-import android.graphics.Bitmap
+import android.graphics.SurfaceTexture
 import android.hardware.Camera
 import android.view.Surface
 import java.lang.ref.WeakReference
+import java.nio.ByteBuffer
 
 object NativeBridge {
     private const val TAG = "[Bridge]"
     @Volatile
-    private var lastRegisteredSurface: WeakReference<Surface>? = null
-
-    private val surfaceLock = Any()
-    @Volatile
     private var cachedBuffer: ByteArray? = null
-
     @Volatile
     var currentCamera: WeakReference<Camera>? = null
     @Volatile
@@ -40,55 +36,35 @@ object NativeBridge {
             callback.onPreviewFrame(buffer, camera)
         }
     }
-    @JvmStatic
-    external fun updateGlobalConfig(playSound: Boolean, enableLog: Boolean)
 
     @JvmStatic
-    external fun updateCameraBaseData(api: Int, facingFront: Boolean,
-                                      sensorOrientation: Int, displayOrientation: Int)
+    external fun createOESTexture(): Int
     @JvmStatic
-    external fun updateCameraExtendedData(surface: Surface,
-                                          isActive: Boolean, format: Int,
-                                          previewWidth: Int, previewHeight: Int,
-                                          pictureWidth: Int, pictureHeight: Int)
+    external fun notifyFrameAvailable()
     @JvmStatic
-    external fun registerSurface(cameraState: CameraState)
-    @JvmStatic
-    external fun updateManualRotation(rotation: Int)
-    @JvmStatic
-    external fun setDisplayOrientation(orientation: Int)
+    external fun setSurfaceTexture(st: SurfaceTexture)
     @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray
     @JvmStatic
-    external fun resetMediaSource()
+    external fun updateCameraBaseData(api: Int, facingFront: Boolean, sensorOri: Int, displayOri: Int)
     @JvmStatic
-    external fun processVideo(fd: Int, offset: Long, length: Long): Boolean
+    external fun setDisplayOrientation(displayOri: Int)
     @JvmStatic
-    external fun processBitmap(bitmap: Bitmap): Boolean
+    external fun updateManualRotation(rotation: Int)
     @JvmStatic
-    external fun needStopRenderer()
+    external fun updateCameraExtendedData(surface: Surface, active: Boolean,
+                                          vWidth: Int, vHeight: Int, pWidth: Int, pHeight: Int)
     @JvmStatic
-    external fun needStartRenderer()
+    external fun updateCameraExtendedData(surface: Surface)
     @JvmStatic
-    external fun overwritePreviewBuffer(originBuffer: ByteArray)
+    external fun updateFrameInfo(width: Int, height: Int, rotation: Int)
+    @JvmStatic
+    external fun overwriteYuvBuffer(originBuffer: ByteArray)
+
+    @JvmStatic
+    external fun overwriteYuvBuffer(yBuffer: ByteBuffer, yRowStride: Int, yPixelStride: Int,
+                                    uBuffer: ByteBuffer, uRowStride: Int, uPixelStride: Int,
+                                    vBuffer: ByteBuffer, vRowStride: Int, vPixelStride: Int)
     @JvmStatic
     external fun overwriteJPEGBytes(quality: Int = 90): ByteArray
-
-    fun registerSurfaceIfNew(state: CameraState, forceRefresh: Boolean = false) {
-        synchronized(surfaceLock) {
-            val lastSurface = lastRegisteredSurface?.get()
-            state.surface?.let { surface ->
-                if (forceRefresh || surface != lastSurface) {
-                    registerSurface(cameraState = state)
-                    lastRegisteredSurface = WeakReference(surface)
-                }
-            }
-        }
-    }
-
-    fun releaseLastRegisteredSurface() {
-        synchronized(surfaceLock) {
-            lastRegisteredSurface = null
-        }
-    }
 }

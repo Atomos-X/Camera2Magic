@@ -1,6 +1,7 @@
 package com.nothing.camera2magic.viewmodel
 
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
@@ -92,6 +93,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
                     }
                 }
             }
+            val remoteFile = service.openRemoteFile("xxx.txt")
         }
     }
 
