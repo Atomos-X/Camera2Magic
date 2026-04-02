@@ -22,12 +22,31 @@ class Camera1Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
 
         private const val CLS_CAMERA = "android.hardware.Camera"
         private var blackHole: Any? = null
-        private lateinit var openInterceptor: (Chain) -> Any?
-        private lateinit var previewCallbackInterceptor: (Chain) -> Any?
         private val Camera.state: CameraState
             get() = CameraRegistry.obtain(this) { apiLevel = 1 }
         private val Camera.isActiveRef: Boolean
             get() = CameraRegistry.isActive(this)
+    }
+
+    private val openInterceptor: (Chain) -> Any? = intercept@{ chain ->
+        val camera = chain.proceed() as? Camera ?: return@intercept null
+        val cameraId = chain.args.getOrNull(0) as? Int ?: 0
+        val info = Camera.CameraInfo()
+        Camera.getCameraInfo(cameraId, info)
+
+        camera.state.apply {
+            this.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+            this.sensorOrientation = info.orientation
+            this.packageName = GlobalState.packageName
+        }
+
+        return@intercept camera
+    }
+    private val previewCallbackInterceptor: (Chain) -> Any? = intercept@ { chain ->
+        if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
+        val originCallback = chain.args[0] as? Camera.PreviewCallback ?: return@intercept chain.proceed()
+        originCallback.javaClass.safeHook { onPreviewFrameHook() }
+        chain.proceed()
     }
     override val hookedClasses: MutableSet<Class<*>> = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
 
@@ -44,27 +63,6 @@ class Camera1Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
     }
 
     init {
-        openInterceptor = intercept@{ chain ->
-            val camera = chain.proceed() as? Camera ?: return@intercept null
-            val cameraId = chain.args.getOrNull(0) as? Int ?: 0
-            val info = Camera.CameraInfo()
-            Camera.getCameraInfo(cameraId, info)
-
-            camera.state.apply {
-                this.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
-                this.sensorOrientation = info.orientation
-                this.packageName = GlobalState.packageName
-            }
-
-            return@intercept camera
-        }
-
-        previewCallbackInterceptor = intercept@ { chain ->
-            if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
-            val originCallback = chain.args[0] as? Camera.PreviewCallback ?: return@intercept chain.proceed()
-            originCallback.javaClass.safeHook { onPreviewFrameHook() }
-            chain.proceed()
-        }
 
         param.classLoader.safeHook(CLS_CAMERA) {
             openHook()
@@ -204,8 +202,11 @@ class Camera1Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
         val setPreviewCallbackWithBuffer = getDeclaredMethod(
             "setPreviewCallbackWithBuffer",
             Camera.PreviewCallback::class.java)
+        val setOneShotPreviewCallback = getDeclaredMethod("setOneShotPreviewCallback",
+            Camera.PreviewCallback::class.java)
         magic.hook(setPreviewCallback).intercept(previewCallbackInterceptor)
         magic.hook(setPreviewCallbackWithBuffer).intercept(previewCallbackInterceptor)
+        magic.hook(setOneShotPreviewCallback).intercept(previewCallbackInterceptor)
     }
     private fun Class<*>.addCallbackBufferHook() {
         val addCallbackBuffer = getDeclaredMethod("addCallbackBuffer",
