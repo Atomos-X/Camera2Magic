@@ -1,6 +1,7 @@
 package com.nothing.camera2magic.hook
 
 import android.content.Context
+import android.content.res.AssetFileDescriptor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -15,16 +16,28 @@ import android.opengl.EGLDisplay
 import android.opengl.GLES20
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.ParcelFileDescriptor
 import android.view.Surface
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.RawResourceDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
+import java.io.File
+import java.io.FileInputStream
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,18 +45,7 @@ import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.hook.SourceManager as SM
 object Camera3 {
     private const val TAG = "[Camera3]"
-    // 由 camera3 持有黑洞
     private val surfaceIsHijacked = Collections.newSetFromMap(ConcurrentHashMap<Surface, Boolean>())
-    @Volatile
-    lateinit var blackHole: Surface
-        private set
-    @Volatile
-    private var texName: Int = 0
-    private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
-    private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
-    @Volatile
-    lateinit var blackHoleSurfaceTexture: SurfaceTexture
-        private set
     @Volatile
     private var initialized = AtomicBoolean(false)
     private var player: ExoPlayer? = null
@@ -82,47 +84,9 @@ object Camera3 {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            error.printStackTrace()
+            Dog.e(TAG, "播放失败原因: ${error.errorCodeName} - ${error.message}", error, true)
             notifyState(State.ERROR)
         }
-    }
-
-    private fun initEGL() {
-        eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-        val version = IntArray(2)
-        EGL14.eglInitialize(eglDisplay, version, 0, version, 1)
-
-        val configAttribs = intArrayOf(
-            EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-            EGL14.EGL_NONE
-        )
-        val configs = arrayOfNulls<EGLConfig>(1)
-        val numConfigs = IntArray(1)
-        EGL14.eglChooseConfig(eglDisplay, configAttribs, 0, configs, 0, 1, numConfigs, 0)
-
-        val contextAttribs = intArrayOf(
-            EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
-            EGL14.EGL_NONE
-        )
-        eglContext = EGL14.eglCreateContext(eglDisplay, configs[0], EGL14.EGL_NO_CONTEXT, contextAttribs, 0)
-
-        val pbufferAttribs = intArrayOf(EGL14.EGL_WIDTH, 1, EGL14.EGL_HEIGHT, 1, EGL14.EGL_NONE)
-        val pbuffer = EGL14.eglCreatePbufferSurface(eglDisplay, configs[0], pbufferAttribs, 0)
-        EGL14.eglMakeCurrent(eglDisplay, pbuffer, pbuffer, eglContext)
-        Dog.i(TAG, "BlackHole Ready.")
-    }
-    private fun initBlackHole() {
-        initEGL()
-        val texIds = IntArray(1)
-        GLES20.glGenTextures(1, texIds, 0)
-        texName = texIds[0]
-        blackHoleSurfaceTexture = SurfaceTexture(texName).apply {
-            setDefaultBufferSize(320, 240)
-            setOnFrameAvailableListener({ texture ->
-                camera3Handler.post { runCatching { texture.updateTexImage() } }
-            }, camera3Handler)
-        }
-        blackHole = Surface(blackHoleSurfaceTexture)
     }
     @OptIn(UnstableApi::class)
     fun Context.initCamera3() {
@@ -130,8 +94,6 @@ object Camera3 {
 
         thread = HandlerThread("camera3").apply { start() }
         camera3Handler = Handler(thread.looper)
-
-        initBlackHole()
 
         camera3Handler.post {
             Dog.w(TAG, "init camera3..", SM.enableLog)
@@ -147,6 +109,7 @@ object Camera3 {
             NB.setSurfaceTexture(surfaceTexture!!)
             player = ExoPlayer.Builder(this).build().apply {
                 repeatMode = Player.REPEAT_MODE_ALL
+                setVideoSurface(surface)
                 addListener(playerListener)
             }
         }
@@ -161,6 +124,7 @@ object Camera3 {
             else -> handleVideo(media.uri)
         }
     }
+
     private fun handleImage(uri: Uri) {
         val contentResolver = GlobalState.appContext.contentResolver
         runCatching {

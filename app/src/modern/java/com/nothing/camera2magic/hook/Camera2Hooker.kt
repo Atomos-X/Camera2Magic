@@ -117,11 +117,11 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
                     Camera3.markedAsHijacked(origin)
                     val (width, height, format) = NB.getSurfaceInfo(origin)
                     Dog.i(TAG, "[outputConfiguration]: ${origin.shortId}, size: ${width}x${height}, format: $format", SM.enableLog)
-                    if (format == 1) {
+                    if (format == 1 || format == 4) {
                         modified = true
                         originSurface = WeakReference(origin)
                         NB.updateCameraExtendedData(origin)
-                        return@mapTo Camera3.blackHole
+                        return@mapTo BlackHole.surface
                     }
                     return@mapTo origin
                 }
@@ -150,7 +150,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
                 if (format == 1) {
                     originSurface = WeakReference(origin)
                     NB.updateCameraExtendedData(origin)
-                    return@mapTo Camera3.blackHole
+                    return@mapTo BlackHole.surface
                 }
                 return@mapTo origin
             }
@@ -185,7 +185,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             val (width, height, format) = NB.getSurfaceInfo(origin)
             if (format != 1) return@intercept chain.proceed()
             val newArgs = chain.args.toTypedArray()
-            newArgs[0] = Camera3.blackHole
+            newArgs[0] = BlackHole.surface
             return@intercept chain.proceed(newArgs)
         }
     }
@@ -195,7 +195,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(removeTarget).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
             val newArgs = chain.args.toTypedArray()
-            newArgs[0] = Camera3.blackHole
+            newArgs[0] = BlackHole.surface
             chain.proceed(newArgs)
         }
     }

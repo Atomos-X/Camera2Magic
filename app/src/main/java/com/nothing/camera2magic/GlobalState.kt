@@ -6,4 +6,5 @@ object GlobalState {
     lateinit var appContext: Context
     @Volatile
     var activityCount = 0
+
 }

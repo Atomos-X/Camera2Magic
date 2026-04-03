@@ -3,9 +3,13 @@ package com.nothing.camera2magic.viewmodel
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.edit
+import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
-import androidx.core.content.edit
+import java.io.FileOutputStream
+import java.io.InputStream
+
 
 private const val TAG = "[VCX][ConfigRepo]"
 private const val GROUP_NAME = "camera_magic_config"
@@ -78,6 +82,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
             }
         }
     }
+
     private fun syncAllToRemote() {
         xposedService?.let { service ->
             val remotePrefs = service.getRemotePreferences(GROUP_NAME)
@@ -93,7 +98,21 @@ class ConfigRepository(private val prefs: SharedPreferences) {
                     }
                 }
             }
-            val remoteFile = service.openRemoteFile("xxx.txt")
+        }
+    }
+
+    fun prepareRemoteMedia(type: String?, inputStream: InputStream) {
+        val result = runCatching {
+            val pfd = xposedService?.openRemoteFile("video.$type")
+            val fos = FileOutputStream(pfd?.fileDescriptor)
+            val buffer = ByteArray(1024 * 32)
+            var read: Int
+            while ((inputStream.read(buffer).also { read = it }) != -1) {
+                fos.write(buffer, 0, read)
+            }
+            fos.flush()
+        }.onFailure {
+            Dog.e(TAG, "写入远程文件失败: ${it.message}", null, enableLog)
         }
     }
 
@@ -141,9 +160,17 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         get() = prefs.getLong("local_video_id", -1L)
         set(value) = save("local_video_id", value)
 
+    var videoUri: String?
+        get() = prefs.getString("local_video_uri", null)
+        set(value) = save("local_video_uri", value)
+
     var imageId: Long
         get() = prefs.getLong("local_image_id", -1L)
         set(value) = save("local_image_id", value)
+
+    var imageUri: String?
+        get() = prefs.getString("local_image_uri", null)
+        set(value) = save("local_image_uri", value)
 
     var rtspUri: String
         get() = prefs.getString("network_rtsp_uri", "") ?: ""

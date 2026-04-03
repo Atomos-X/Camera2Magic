@@ -1,8 +1,8 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import com.android.build.api.variant.FilterConfiguration
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -39,8 +39,8 @@ android {
     flavorDimensions.add("api")
 
     productFlavors {
-        create("legacy") { dimension = "api" }
-        create("modern") { dimension = "api" }
+        register("legacy") { dimension = "api" }
+        register("modern") { dimension = "api" }
     }
 
     namespace 'com.nothing.camera2magic'
@@ -64,19 +64,14 @@ android {
             }
         }
 
-//        ndk {
-//            abiFilters.add("arm64-v8a")
-//            abiFilters.add("armeabi-v7a") // build test for arm7
-//        }
-
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     splits {
         abi {
             enable true
             reset()
-            include "arm64-v8a"
-            //include "armeabi-v7a", "arm64-v8a"
+            include ("arm64-v8a", "armeabi-v7a")
+            universalApk false
         }
     }
     buildTypes {
@@ -88,21 +83,28 @@ android {
     }
 
     // 自定义生成的 APK 文件名
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            def flavor = variant.flavorName
-            def abi = output.getFilter("ABI")
-            def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${abi}.apk"
-            output.outputFileName = fileName
-        }
+    androidComponents {
+        onVariants(selector().all(), { variant ->
+            variant.outputs.each { output ->
+                def abi = output.filters.find {
+                    it.filterType == FilterConfiguration.FilterType.ABI
+                }?.identifier
+                def flavor = variant.flavorName
+                def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${abi}.apk"
+                output.outputFileName.set(fileName)
+            }
+        })
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = '11'
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
     }
 
     externalNativeBuild {
@@ -114,6 +116,7 @@ android {
 
     buildFeatures {
         compose true
+        aidl true
     }
 
     sourceSets {
@@ -125,6 +128,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging false
+        }
         jniLibs.pickFirsts.add("**/libcamera3.so")
     }
 }
@@ -179,12 +185,12 @@ tasks.register("buildNative", Copy) {
 
 dependencies {
     legacyCompileOnly "de.robv.android.xposed:api:82"
-    modernCompileOnly 'io.github.libxposed:api:101.0.0'
+    modernCompileOnly 'io.github.libxposed:api:101.0.1'
     modernImplementation 'io.github.libxposed:service:101.0.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0"
     implementation "com.google.accompanist:accompanist-permissions:0.37.3"
-    implementation "androidx.media3:media3-exoplayer:1.9.3"
+    implementation "androidx.media3:media3-exoplayer:1.10.0"
 
     implementation libs.androidx.compose.foundation
     implementation libs.androidx.compose.adaptive

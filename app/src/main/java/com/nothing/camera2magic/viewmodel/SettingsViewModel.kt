@@ -1,11 +1,16 @@
 package com.nothing.camera2magic.viewmodel
 
+import android.app.Application
+import androidx.core.net.toUri
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import androidx.lifecycle.ViewModel
+import com.nothing.camera2magic.utils.Dog
 
-class SettingsViewModel(private val repository: ConfigRepository) : ViewModel() {
+class SettingsViewModel(
+    private val app: Application,
+    private val repository: ConfigRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState = _uiState.asStateFlow()

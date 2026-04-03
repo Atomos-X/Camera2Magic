@@ -25,7 +25,7 @@
     native <methods>;
 }
 
-# 假设你的包名是 com.nothing.camera2magic
+# com.nothing.camera2magic
 -keep class com.nothing.camera2magic.** {
     *;
 }

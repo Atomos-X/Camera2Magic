@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -36,6 +35,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val prefs = getSharedPreferences("camera_magic_config", MODE_PRIVATE)
 
         enableEdgeToEdge()
@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 
 @Composable
 private fun PermissionRationaleScreen(onGrantPermissionClick: () -> Unit) {
