@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 import com.nothing.camera2magic.viewmodel.MediaSource
 import com.nothing.camera2magic.viewmodel.MediaType
@@ -47,6 +48,7 @@ import kotlin.enums.EnumEntries
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpotlightView() {
+    val tag = "[Spotlight View]"
     val mediaSources = MediaSource.entries
     val mediaSourceLabels = stringArrayResource(R.array.media_source)
     val mediaTypes = MediaType.entries

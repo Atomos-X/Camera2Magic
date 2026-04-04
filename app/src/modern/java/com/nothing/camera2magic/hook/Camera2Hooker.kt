@@ -68,7 +68,6 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
 
         magic.hook(onConfigureFailed).intercept { chain ->
             Dog.e(TAG, "CameraCaptureSession.StateCallback: onConfigureFailed.", null, true)
-            BlackHoleMapper.clearAll()
             chain.proceed()
         }
     }
@@ -103,8 +102,6 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
                 this.packageName = GlobalState.packageName
             }
 
-            BlackHoleMapper.clearAll()
-
             val sessionConfiguration = chain.args[0] as SessionConfiguration
 
             @SuppressLint("SoonBlockedPrivateApi")
@@ -126,7 +123,7 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
                             this.previewHeight = height
                             this.surface = origin
                         }
-                        return@mapTo BlackHoleMapper.createBlackHole(origin)
+                        return@mapTo BlackHole.surface
                     }
                     origin
                 }
@@ -146,7 +143,6 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
             if (!SourceManager.isReadyForHook()) return@intercept chain.proceed()
             val camera = chain.thisObject as CameraDevice
 
-            BlackHoleMapper.clearAll()
             @Suppress("UNCHECKED_CAST")
             val surfaces = chain.args[0] as List<Surface>
             val newList = surfaces.mapTo(ArrayList()) { origin ->
@@ -160,7 +156,7 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
                         this.previewHeight = height
                         this.surface = origin
                     }
-                    return@mapTo BlackHoleMapper.createBlackHole(origin)
+                    return@mapTo BlackHole.surface
                 }
                 origin
             }
@@ -180,7 +176,6 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
             if (camera.isActiveRef) {
                 Handler(Looper.getMainLooper()).post { NB.needStopRenderer() }
                 NB.releaseLastRegisteredSurface()
-                BlackHoleMapper.clearAll()
             }
             chain.proceed()
         }
@@ -189,24 +184,20 @@ class Camera2Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
         val addTarget = getDeclaredMethod("addTarget", Surface::class.java)
         magic.hook(addTarget).intercept { chain ->
             val origin = chain.args[0] as Surface
-            Dog.i(TAG, "addTarget ${origin.shortId}", SourceManager.enableLog)
-            val blackHole = BlackHoleMapper.getBlackHole(origin)
-            if (!SourceManager.isReadyForHook() || blackHole == null) {
-                return@intercept chain.proceed()
-            }
-            Dog.i(TAG, "Camera3 replace ${origin.shortId} with blackHole...", SourceManager.enableLog)
-            chain.proceed(arrayOf(blackHole))
+            val (_, _, format) = NB.getSurfaceInfo(origin)
+            val newArgs = chain.args.toTypedArray()
+            if (format == 1) newArgs[0] = BlackHole.surface
+            chain.proceed(newArgs)
         }
     }
     private fun Class<*>.removeTargetHook() {
         val removeTarget = getDeclaredMethod("removeTarget", Surface::class.java)
         magic.hook(removeTarget).intercept { chain ->
             val origin = chain.args[0] as Surface
-            val blackHole = BlackHoleMapper.getBlackHole(origin)
-            if (!SourceManager.isReadyForHook() || blackHole == null) {
-                return@intercept chain.proceed()
-            }
-            chain.proceed(arrayOf(blackHole))
+            val (_, _, format) = NB.getSurfaceInfo(origin)
+            val newArgs = chain.args.toTypedArray()
+            if (format == 1) newArgs[0] = BlackHole.surface
+            chain.proceed(newArgs)
         }
     }
 }

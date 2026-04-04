@@ -8,6 +8,8 @@ import android.provider.MediaStore
 import android.util.Size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nothing.camera2magic.hook.SourceManager
+import com.nothing.camera2magic.utils.Dog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +27,9 @@ class SpotlightViewModel(
     private val app: Application,
     private val repository: ConfigRepository
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "[Spotlight ViewModel]"
+    }
 
     private val _thumbnails = MutableStateFlow<Map<MediaType, Bitmap?>>(emptyMap())
     val thumbnails = _thumbnails.asStateFlow()
@@ -61,6 +66,7 @@ class SpotlightViewModel(
 
     fun onMediaSelected(type: MediaType, uri: Uri?) {
         if (uri == null) return
+        Dog.i(TAG, "${type.mimeType}, $uri", repository.enableLog)
         val mediaId = try {
             uri.lastPathSegment?.toLongOrNull()
         } catch (_: kotlin.Exception) { null }

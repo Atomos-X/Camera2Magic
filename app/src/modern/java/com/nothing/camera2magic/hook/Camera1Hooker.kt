@@ -111,10 +111,7 @@ class Camera1Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
             @SuppressLint("Recycle")
             camera.state.apply { this.surface = Surface(surfaceTexture) }
 
-            val fakeSurfaceTexture = SurfaceTexture(false)
-                .apply { setDefaultBufferSize(1, 1) }
-
-            blackHole = fakeSurfaceTexture.also { chain.proceed(arrayOf(it)) }
+            chain.proceed(arrayOf(BlackHole.surfaceTexture))
         }
     }
     private fun Class<*>.setPreviewDisplayHook() {
@@ -127,12 +124,10 @@ class Camera1Hooker(val magic: MagicHook, val param: PackageReadyParam) : HookMa
             val holder = chain.args[0] as SurfaceHolder
             camera.state.apply { this.surface = holder.surface }
             @SuppressLint("Recycle")
-            val surfaceTexture = SurfaceTexture(false)
-                .apply { setDefaultBufferSize(1, 1) }
-            val surface = Surface(surfaceTexture).also { blackHole = it }
+
             val surfaceHolderProxy = Proxy.newProxyInstance(holder.javaClass.classLoader,
                 arrayOf(SurfaceHolder::class.java)) { _, method, args ->
-                if (method.name == "getSurface") return@newProxyInstance surface
+                if (method.name == "getSurface") return@newProxyInstance BlackHole.surface
                 return@newProxyInstance method.invoke(holder, *(args ?: arrayOfNulls<Any>(0)))
             } as SurfaceHolder
             chain.proceed(arrayOf(surfaceHolderProxy))
