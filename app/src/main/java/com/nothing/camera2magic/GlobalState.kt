@@ -7,4 +7,6 @@ object GlobalState {
     @Volatile
     var activityCount = 0
 
+    @Volatile
+    lateinit var packageName: String
 }

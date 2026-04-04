@@ -30,6 +30,7 @@ class MagicHook : XposedModule() {
     override fun onPackageReady(param: PackageReadyParam) {
         if (!param.isFirstPackage) return
         packageName = param.packageName
+        GlobalState.packageName = param.packageName
         val remotePrefs = getRemotePreferences("camera_magic_config")
         SM.init(remotePrefs)
         Application::class.java.onCreateHook()

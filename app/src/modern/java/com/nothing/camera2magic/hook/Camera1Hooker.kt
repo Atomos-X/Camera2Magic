@@ -3,26 +3,23 @@
 package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
+
 import android.hardware.Camera
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
-import android.os.IBinder
-import android.provider.Settings
-import androidx.annotation.OptIn
+import android.media.MediaPlayer
 import androidx.core.net.toUri
-import androidx.media3.common.util.UnstableApi
 import com.nothing.camera2magic.GlobalState
+
 import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.hook.SourceManager as SM
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.FileInputStream
+import java.io.FileReader
 import java.lang.ref.WeakReference
 import java.lang.reflect.Proxy
 import java.util.Collections
@@ -142,7 +139,6 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun Class<*>.startPreviewHook() {
         val startPreview = getDeclaredMethod("startPreview")
         magic.hook(startPreview).intercept { chain ->
@@ -153,10 +149,8 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
                 NB.updateCameraExtendedData(originSurface!!, true,
                     previewSize.width, previewSize.height,
                     pictureSize.width, pictureSize.height)
-//                SM.validMedia?.let { Camera3.start(it) }
-                val pfd = magic.openRemoteFile("video.mp4")
-
-
+                // SM.validMedia?.let { Camera3.start(it) }
+                Camera3.start("/data/local/tmp/001.mp4")
             }
             chain.proceed()
         }

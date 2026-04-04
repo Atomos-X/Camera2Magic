@@ -66,6 +66,7 @@ android {
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
+
     splits {
         abi {
             enable true

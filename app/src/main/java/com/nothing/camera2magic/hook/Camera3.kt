@@ -1,7 +1,6 @@
 package com.nothing.camera2magic.hook
 
 import android.content.Context
-import android.content.res.AssetFileDescriptor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -9,35 +8,20 @@ import android.graphics.PorterDuff
 import android.graphics.SurfaceTexture
 
 import android.net.Uri
-import android.opengl.EGL14
-import android.opengl.EGLConfig
-import android.opengl.EGLContext
-import android.opengl.EGLDisplay
-import android.opengl.GLES20
+
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.ParcelFileDescriptor
 import android.view.Surface
-import androidx.annotation.OptIn
-import androidx.core.net.toUri
-import androidx.media3.common.C
+
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.RawResourceDataSource
-import androidx.media3.datasource.TransferListener
+
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
-import java.io.File
-import java.io.FileInputStream
+
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -88,7 +72,7 @@ object Camera3 {
             notifyState(State.ERROR)
         }
     }
-    @OptIn(UnstableApi::class)
+
     fun Context.initCamera3() {
         if (!initialized.compareAndSet(false, true)) return
 
@@ -101,7 +85,7 @@ object Camera3 {
             oesTextureId = NB.createOESTexture()
             surfaceTexture = SurfaceTexture(oesTextureId).apply {
                 setDefaultBufferSize(16, 16)
-                setOnFrameAvailableListener({ st ->
+                setOnFrameAvailableListener({ _ ->
                     NB.notifyFrameAvailable()
                 }, camera3Handler)
             }
@@ -115,7 +99,36 @@ object Camera3 {
         }
     }
 
-    @UnstableApi
+    fun start(path: String) {
+        if (!initialized.get()) return
+        if (surface == null) surface = Surface(surfaceTexture)
+        val volumeValue = if (SM.playSound) 1f else 0f
+        camera3Handler.post {
+            player?.apply {
+                volume = volumeValue
+                setVideoSurface(surface)
+                setMediaItem(MediaItem.fromUri(path))
+                prepare()
+                playWhenReady = true
+            }
+        }
+    }
+
+    fun start(uri: Uri) {
+        if (!initialized.get()) return
+        if (surface == null) surface = Surface(surfaceTexture)
+        val volumeValue = if (SM.playSound) 1f else 0f
+        camera3Handler.post {
+            player?.apply {
+                volume = volumeValue
+                setVideoSurface(surface)
+                setMediaItem(MediaItem.fromUri(uri))
+                prepare()
+                playWhenReady = true
+            }
+        }
+    }
+
     fun start(media: ValidMedia) {
         if (!initialized.get()) return
         if (surface == null) surface = Surface(surfaceTexture)
@@ -150,6 +163,7 @@ object Camera3 {
             camera3Handler.post(imageRenderRunnable)
         }
     }
+
     private val imageRenderRunnable = object : Runnable {
         override fun run() {
             if (!initialized.get() || !imageRendering) return
@@ -157,6 +171,7 @@ object Camera3 {
             if (imageRendering) camera3Handler.postDelayed(this, 33L)
         }
     }
+
     private fun drawBitmapToSurface() {
         val bitmap = cachedBitmap ?: return
         runCatching {
