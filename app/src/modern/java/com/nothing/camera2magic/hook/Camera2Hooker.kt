@@ -2,7 +2,6 @@ package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Camera
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -13,7 +12,6 @@ import android.os.Handler
 import android.view.Surface
 import android.view.WindowManager
 import androidx.annotation.OptIn
-import androidx.compose.material3.NavigationBar
 import androidx.media3.common.util.UnstableApi
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicHook
@@ -42,7 +40,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         private val CameraDevice.isActiveRef: Boolean
             get() = activatedCamera.get() == this
 
-        private var originSurface = WeakReference<Surface>(null)
+        private var cachedOriginSurface = WeakReference<Surface>(null)
     }
 
     init {
@@ -118,14 +116,18 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             sessionConfiguration.outputConfigurations.forEach { outputConfiguration ->
                 var modified = false
                 val surfaces = outputConfiguration.surfaces
-                val targetSurface = surfaces.find { NB.getSurfaceInfo(it)[3] == 1 } // 优先寻找 format=1
-                    ?: surfaces.find { NB.getSurfaceInfo(it)[3] == 4 } // 找不到就找format = 4
+
+                val targetSurface = surfaces.find { NB.getSurfaceInfo(it)[2] == 1 }
+                    ?: surfaces.find { NB.getSurfaceInfo(it)[2] == 4 }
+                targetSurface?.let {
+                    Dog.w(TAG, "find ${targetSurface}, format: ${NB.getSurfaceInfo(it)}", true)
+                }
 
                 val modifiedSurfaces = surfaces.mapTo(ArrayList()) { origin ->
                     Camera3.markedAsHijacked(origin)
                     if (origin == targetSurface) {
                         modified = true
-                        originSurface = WeakReference(origin)
+                        cachedOriginSurface = WeakReference(origin)
                         NB.updateCameraExtendedData(origin)
                         return@mapTo BlackHole.surface
                     }
@@ -149,12 +151,13 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             camera.updateBaseData()
             @Suppress("UNCHECKED_CAST")
             val surfaces = chain.args[0] as List<Surface>
+            val targetSurface = surfaces.find { NB.getSurfaceInfo(it)[2] == 1 }
+                ?: surfaces.find { NB.getSurfaceInfo(it)[2] == 4 }
+
             val newList = surfaces.mapTo(ArrayList()) { origin ->
                 Camera3.markedAsHijacked(origin)
-                val (width, height, format) = NB.getSurfaceInfo(origin)
-                Dog.i(TAG, "[List<Surface>] ${origin.shortId}, size: ${width}x${height}, format: $format", SM.enableLog)
-                if (format == 1) {
-                    originSurface = WeakReference(origin)
+                if (origin == targetSurface) {
+                    cachedOriginSurface = WeakReference(origin)
                     NB.updateCameraExtendedData(origin)
                     return@mapTo BlackHole.surface
                 }
@@ -176,7 +179,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             if (camera.isActiveRef) {
                 Camera3.stop()
                 Dog.w(TAG, "stop renderer for: $camera.", SM.enableLog)
-                originSurface.clear()
+                cachedOriginSurface.clear()
                 Camera3.clearHijackedList()
             }
             chain.proceed()
@@ -187,12 +190,16 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(addTarget).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
             val origin = chain.args[0] as Surface
+            val (_, _, format) = NB.getSurfaceInfo(origin)
             Dog.i(TAG, "app wanna addTarget ${origin.shortId}", SM.enableLog)
-            val cachedSurface = originSurface.get()
-            if (origin != cachedSurface) return@intercept chain.proceed()
-            val newArgs = chain.args.toTypedArray()
-            newArgs[0] = BlackHole.surface
-            return@intercept chain.proceed(newArgs)
+            // dirty fix: in some app camera2, addTarget run before createCaptureSession;
+            // just replace blackHole here, save origin surface in createCaptureSession.
+            if ((cachedOriginSurface.get() == null && (format == 1 || format == 34)) || origin == cachedOriginSurface.get()) {
+                val newArgs = chain.args.toTypedArray()
+                newArgs[0] = BlackHole.surface
+                return@intercept chain.proceed(newArgs)
+            }
+            return@intercept chain.proceed()
         }
     }
 
@@ -202,8 +209,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             if (!SM.readyForHook) return@intercept chain.proceed()
             val origin = chain.args[0] as Surface
             Dog.i(TAG, "app wanna removeTarget ${origin.shortId}", SM.enableLog)
-            val cachedSurface = originSurface.get()
-            if (origin != cachedSurface) return@intercept chain.proceed()
+            if (origin != cachedOriginSurface.get()) return@intercept chain.proceed()
             val newArgs = chain.args.toTypedArray()
             newArgs[0] = BlackHole.surface
             return@intercept chain.proceed(newArgs)
