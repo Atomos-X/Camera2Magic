@@ -109,7 +109,6 @@ object Camera3 {
     }
 
     fun start(magic: MagicHook, validMedia: ValidMedia) {
-        pfd?.close()
 
         if (!initialized.get()) return
         if (surface == null) surface = Surface(surfaceTexture)
@@ -124,7 +123,6 @@ object Camera3 {
             }
 
             MagicType.LOCAL_IMAGE -> {
-                Dog.w(TAG, "加载图片: $name", true)
                 pfd = magic.openRemoteFile(name)
                 pfd?.let { handleLocalImage(it) }
             }
@@ -216,22 +214,23 @@ object Camera3 {
             camera3Handler.removeCallbacks(imageRenderRunnable)
             player?.stop()
             player?.clearVideoSurface()
+            player?.clearMediaItems()
             releaseResources()
         }
     }
+
     fun releaseResources() {
-        pfd?.close()
         surfaceIsHijacked.clear()
         if (cachedBitmap != null) {
             val tmp = cachedBitmap
             cachedBitmap = null
             tmp?.recycle()
         }
-        player?.clearMediaItems()
-        player?.clearVideoSurface()
         surfaceTexture?.setDefaultBufferSize(16, 16)
         surface?.release()
         surface = null
+        pfd?.close()
+        pfd = null
     }
     private fun notifyState(state: State) {
         onPlayerStateChangeListener?.invoke(state)

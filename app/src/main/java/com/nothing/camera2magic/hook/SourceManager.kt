@@ -57,24 +57,36 @@ object SourceManager {
         refreshPrefs()
     }
 
+    private fun updateState(media: ValidMedia?, message: String) {
+        validMedia = media
+        toastMessage = message
+    }
+
     fun refreshAndDispatch() {
         refreshPrefs()
-        val type = MagicType.fromValue(selectedMedia)
-        Dog.w(TAG, "current media type: ${type.label}", enableLog)
-
-        when (type) {
-            MagicType.LOCAL_VIDEO -> {
-                videoFile?.let { validMedia = ValidMedia(it, type) }
-            }
-
-            MagicType.LOCAL_IMAGE -> {
-                imageFile?.let { validMedia = ValidMedia(it, type) }
-            }
-
-            MagicType.NETWORK_RTSP -> {
-                rtspUri?.let { validMedia = ValidMedia(it, type) }
-            }
+        if (!moduleEnabled) {
+            updateState(null, "Module disabled.")
+            return
         }
+
+
+        val type = MagicType.fromValue(selectedMedia)
+        val label = type.label
+
+        val source = when (type) {
+            MagicType.LOCAL_VIDEO -> videoFile
+            MagicType.LOCAL_IMAGE -> imageFile
+            MagicType.NETWORK_RTSP -> rtspUri
+        }
+
+        Dog.w(TAG, "$label: $source", true)
+
+        if (source == null) {
+            updateState(null, "$label does not exist")
+            return
+        }
+
+        updateState(ValidMedia(source, type), "$label is ready.")
     }
 
     private fun refreshPrefs() {

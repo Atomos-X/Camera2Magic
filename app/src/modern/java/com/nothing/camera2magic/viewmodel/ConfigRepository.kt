@@ -52,33 +52,25 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         })
     }
 
-    private fun <T> save(key: String, value: T) {
-        prefs.edit {
-            when (value) {
-                is Boolean -> putBoolean(key, value)
-                is Int -> putInt(key, value)
-                is Long -> putLong(key, value)
-                is Float -> putFloat(key, value)
-                is String? -> putString(key, value)
-                else -> throw IllegalArgumentException("Unsupported type")
-            }
+    private fun SharedPreferences.Editor.putAny(key: String, value: Any?) {
+        when (value) {
+            is Boolean -> putBoolean(key, value)
+            is Int -> putInt(key, value)
+            is Long -> putLong(key, value)
+            is Float -> putFloat(key, value)
+            is String -> putString(key, value)
+            else -> remove(key) // 处理 null 或不支持的类型
         }
+    }
+
+    private fun <T> save(key: String, value: T?) {
+
+
+        prefs.edit { putAny(key, value) }
 
         xposedService?.let { service ->
-            try {
-                val remotePrefs = service.getRemotePreferences(GROUP_NAME)
-                remotePrefs.edit {
-                    when (value) {
-                        is Boolean -> putBoolean(key, value)
-                        is Int -> putInt(key, value)
-                        is Long -> putLong(key, value)
-                        is Float -> putFloat(key, value)
-                        is String -> putString(key, value)
-                        else -> throw IllegalArgumentException("Unsupported type")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to set_internal_state remote preferences", e)
+            runCatching {
+                service.getRemotePreferences(GROUP_NAME).edit { putAny(key, value) }
             }
         }
     }
@@ -88,14 +80,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
             val remotePrefs = service.getRemotePreferences(GROUP_NAME)
             remotePrefs.edit {
                 prefs.all.forEach { (key, value) ->
-                    when (value) {
-                        is Boolean -> putBoolean(key, value)
-                        is Int -> putInt(key, value)
-                        is Long -> putLong(key, value)
-                        is Float -> putFloat(key, value)
-                        is String -> putString(key, value)
-                        else -> throw IllegalArgumentException("Unsupported type")
-                    }
+                    putAny(key, value)
                 }
             }
         }
