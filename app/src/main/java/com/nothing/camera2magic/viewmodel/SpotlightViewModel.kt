@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Size
 import android.webkit.MimeTypeMap
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nothing.camera2magic.utils.Dog
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
+import kotlinx.coroutines.withContext
 
 data class SpotlightUiState(
     val moduleEnabled: Boolean = true,
@@ -31,6 +34,10 @@ class SpotlightViewModel(
 
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState = _uiState.asStateFlow()
+
+    companion object {
+        private const val TAG = "[Spotlight VM]"
+    }
 
     init {
         loadInitialSettings()
@@ -58,37 +65,45 @@ class SpotlightViewModel(
             currentState.copy(currentType = type)
         }
     }
-    /*
-    fun onMediaSelected(type: MediaType, uri: Uri?) {
-        if (uri == null) return
-        val mediaId = try {
-            uri.lastPathSegment?.toLongOrNull()
-        } catch (_: kotlin.Exception) { null }
-        if (mediaId != null) {
-            saveMediaId(type, mediaId)
-            loadAndVerifyMedia(type, mediaId)
+
+    fun onMediaSelected(type: MediaType, uri: Uri) {
+        try {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            app.contentResolver.takePersistableUriPermission(uri, takeFlags)
+        } catch (e: Exception) {
+            Dog.e(TAG, "Failed to take persistable permission", e, repository.enableLog)
         }
-    }
-    */
-    fun onMediaSelected(type: MediaType, uri: Uri?) {
-        if (uri == null) return
-        val mimeType = app.contentResolver.getType(uri)
-        val exception = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-        app.contentResolver.openInputStream(uri)?.let {
-            repository.prepareRemoteMedia(exception, it)
-            it.close()
+
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    val mimeType = app.contentResolver.getType(uri)
+                    val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+
+                    app.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        repository.prepareRemoteMedia(type.label, extension, inputStream)
+                    } ?: false
+
+                }.getOrDefault(false)
+            }
+
+            if (success) {
+                loadAndVerifyMedia(type, uri)
+            }
         }
     }
     fun clearMediaBy(type: MediaType) {
         when (type) {
-            MediaType.VIDEO -> repository.videoId = -1L
-            MediaType.IMAGE -> repository.imageId = -1L
+            MediaType.VIDEO -> repository.videoUri = null
+            MediaType.IMAGE -> repository.imageUri = null
         }
         updateThumbnailState(type, null)
     }
     fun performHealthCheckAndRefresh() {
-        MediaType.entries.forEach { type ->
-            loadAndVerifyMedia(type)
+        viewModelScope.launch {
+            MediaType.entries.forEach { type ->
+                loadAndVerifyMedia(type)
+            }
         }
     }
 
@@ -113,65 +128,22 @@ class SpotlightViewModel(
             MediaType.IMAGE -> repository.imageUri?.toUri()
         }
     }
-    /*
-    private fun loadAndVerifyMedia(type: MediaType, mediaIdOverride: Long? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val mediaId = mediaIdOverride ?: getMediaId(type)
-            if (mediaId == -1L) {
-                updateThumbnailState(type, null)
-                return@launch
-            }
 
-            var thumbnail: Bitmap? = null
-            var isMediaValid = false
-
-            try {
-                val contentUri = when (type) {
-                    MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                    MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                }
-
-                val uri = ContentUris.withAppendedId(contentUri, mediaId)
-                app.contentResolver.openFileDescriptor(uri, "r")?.use {
-                    isMediaValid = true
-                    thumbnail = app.contentResolver.loadThumbnail(uri, Size(720, 1280), null)
-                }
-            } catch (_: Exception) {
-                isMediaValid = false
-            }
-            if (isMediaValid) {
-                updateThumbnailState(type, thumbnail)
-            } else {
-                updateThumbnailState(type, null)
-                if (mediaIdOverride == null) {
-                    saveMediaId(type, -1L)
-                }
-            }
-        }
-    }
-
-    */
-
-    private fun loadAndVerifyMedia(type: MediaType, uriOverride: Uri? = null) {
-        viewModelScope.launch(Dispatchers.IO ) {
+    private suspend fun loadAndVerifyMedia(type: MediaType, uriOverride: Uri? = null) {
+        withContext(Dispatchers.IO) {
             val targetUri = uriOverride ?: getMediaUri(type)
             if (targetUri == null) {
                 updateThumbnailState(type, null)
-                return@launch
+                return@withContext
             }
 
-            var thumbnail: Bitmap? = null
-            var isValid = false
+            val thumbnail = runCatching {
+                app.contentResolver.loadThumbnail(targetUri, Size(512, 512), null)
+            }.getOrNull()
 
-            runCatching {
-                app.contentResolver.openFileDescriptor(targetUri, "r")?.use {
-                    isValid = true
-                    thumbnail = app.contentResolver.loadThumbnail(targetUri, Size(720, 1280), null)
-                }
-            }.onFailure { isValid = false }
-
-            if (isValid) {
+            if (thumbnail != null) {
                 updateThumbnailState(type, thumbnail)
+                saveMediaUri(type, targetUri.toString())
             } else {
                 updateThumbnailState(type, null)
                 if (uriOverride == null) saveMediaUri(type, null)
@@ -179,7 +151,7 @@ class SpotlightViewModel(
         }
     }
 
-    private fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
+    fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
         _thumbnails.update { currentMap ->
             currentMap + (type to thumbnail)
         }

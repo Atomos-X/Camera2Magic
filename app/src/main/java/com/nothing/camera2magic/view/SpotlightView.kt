@@ -2,7 +2,10 @@ package com.nothing.camera2magic.view
 
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,12 +39,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
 import com.nothing.camera2magic.R
+import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 import com.nothing.camera2magic.viewmodel.MediaSource
 import com.nothing.camera2magic.viewmodel.MediaType
+import kotlinx.coroutines.launch
 import kotlin.enums.EnumEntries
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,15 +66,24 @@ fun SpotlightView() {
 
     var pendingType by remember { mutableStateOf<MediaType?>(null) }
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+    val pickMediaLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         pendingType?.let { type ->
-            viewModel.onMediaSelected(type, it)
+            if (uri == null) return@let
+            viewModel.updateThumbnailState(type, null)
+            viewModel.onMediaSelected(type, uri)
         }
     }
 
     val pickMedia = { type: MediaType ->
+        Dog.w("[Spotlight view]", "pick media: $type", true)
         pendingType = type
-        launcher.launch(type.mimeType)
+        val request = PickVisualMediaRequest(
+            when(type) {
+                MediaType.VIDEO -> PickVisualMedia.VideoOnly
+                MediaType.IMAGE -> PickVisualMedia.ImageOnly
+            }
+        )
+        pickMediaLauncher.launch(request)
     }
 
     Card(
@@ -166,8 +181,7 @@ private fun MediaThumbnailCard(
     mediaType: MediaType,
     thumbnail: Bitmap?,
     onClick: () -> Unit,
-    onClear: () -> Unit
-) {
+    onClear: () -> Unit) {
     var isInDeleteMode by remember { mutableStateOf(false) }
 
     fun handleOnClick() {
@@ -233,11 +247,7 @@ private fun DeleteModeOverlay(visible: Boolean, onClear: () -> Unit) {
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Black.copy(alpha = 0.6f),
-                        Color.Transparent,
-                        Color.Transparent
-                    )
+                    colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent, Color.Transparent)
                 )
             )
         ){
@@ -317,12 +327,8 @@ fun OnLifecycleEvent(onEvent: (event: Lifecycle.Event) -> Unit) {
     val lifecycleOwner by rememberUpdatedState(LocalLifecycleOwner.current)
 
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            eventHandler(event)
-        }
+        val observer = LifecycleEventObserver { _, event -> eventHandler(event) }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 }

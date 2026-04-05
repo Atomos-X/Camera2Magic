@@ -3,6 +3,7 @@
 package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
+import android.content.res.AssetFileDescriptor
 
 import android.hardware.Camera
 import android.view.Surface
@@ -24,6 +25,10 @@ import java.lang.ref.WeakReference
 import java.lang.reflect.Proxy
 import java.util.Collections
 import java.util.WeakHashMap
+import android.system.Os
+import android.system.OsConstants
+import android.util.Log
+import javax.sql.DataSource
 
 @SuppressLint("Recycle")
 class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManager  {
@@ -150,7 +155,8 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
                     previewSize.width, previewSize.height,
                     pictureSize.width, pictureSize.height)
                 // SM.validMedia?.let { Camera3.start(it) }
-                Camera3.start("/data/local/tmp/001.mp4")
+                val pfd = magic.openRemoteFile("video.mp4") // 先拿原始 PFD
+                Camera3.start(pfd)
             }
             chain.proceed()
         }

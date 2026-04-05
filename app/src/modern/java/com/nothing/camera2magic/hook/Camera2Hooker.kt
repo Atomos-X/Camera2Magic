@@ -30,7 +30,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
     companion object {
         private const val TAG = "[CAM2]"
         private const val CAMERA_DEVICE_IMPL = "android.hardware.camera2.impl.CameraDeviceImpl"
-        private const val CAPTURE_REQUEST_BUILDER = "android.hardware.camera2.CaptureRequest\$Builder"
+        private const val CAPTURE_REQUEST_BUILDER = $$"android.hardware.camera2.CaptureRequest$Builder"
         private var activatedCamera = WeakReference<Any>(null)
         private val CameraDevice.isActiveRef: Boolean
             get() = activatedCamera.get() == this

@@ -11,14 +11,21 @@ import android.net.Uri
 
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.ParcelFileDescriptor
+import android.system.Os
+import android.system.OsConstants
 import android.view.Surface
+import androidx.annotation.OptIn
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.utils.Dog
 
@@ -44,6 +51,7 @@ object Camera3 {
     var onPlayerStateChangeListener: ((state: State) -> Unit)? = null
 
     private val playerListener = object : Player.Listener {
+
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             val pixelRatio = videoSize.pixelWidthHeightRatio
             val width = (videoSize.width * pixelRatio).toInt()
@@ -74,6 +82,7 @@ object Camera3 {
     }
 
     fun Context.initCamera3() {
+
         if (!initialized.compareAndSet(false, true)) return
 
         thread = HandlerThread("camera3").apply { start() }
@@ -93,36 +102,26 @@ object Camera3 {
             NB.setSurfaceTexture(surfaceTexture!!)
             player = ExoPlayer.Builder(this).build().apply {
                 repeatMode = Player.REPEAT_MODE_ALL
-                setVideoSurface(surface)
                 addListener(playerListener)
             }
         }
     }
 
-    fun start(path: String) {
+    @OptIn(UnstableApi::class)
+    fun start(pfd: ParcelFileDescriptor) {
         if (!initialized.get()) return
         if (surface == null) surface = Surface(surfaceTexture)
         val volumeValue = if (SM.playSound) 1f else 0f
-        camera3Handler.post {
-            player?.apply {
-                volume = volumeValue
-                setVideoSurface(surface)
-                setMediaItem(MediaItem.fromUri(path))
-                prepare()
-                playWhenReady = true
-            }
-        }
-    }
 
-    fun start(uri: Uri) {
-        if (!initialized.get()) return
-        if (surface == null) surface = Surface(surfaceTexture)
-        val volumeValue = if (SM.playSound) 1f else 0f
+        val factory = DataSource.Factory { MagicDataSource(pfd) }
+        val mediaSource = ProgressiveMediaSource.Factory(factory)
+            .createMediaSource(MediaItem.fromUri("magic://video"))
+
         camera3Handler.post {
             player?.apply {
                 volume = volumeValue
                 setVideoSurface(surface)
-                setMediaItem(MediaItem.fromUri(uri))
+                setMediaSource(mediaSource)
                 prepare()
                 playWhenReady = true
             }
@@ -150,7 +149,7 @@ object Camera3 {
 
             options.inJustDecodeBounds = false
             options.inPreferredConfig = Bitmap.Config.ARGB_8888
-            options.inSampleSize = calculateInSampleSize(options, 1080, 1920)
+            options.inSampleSize = calculateInSampleSize(options)
 
             val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, options)
@@ -207,6 +206,7 @@ object Camera3 {
             imageRendering = false
             camera3Handler.removeCallbacks(imageRenderRunnable)
             player?.stop()
+            player?.clearVideoSurface()
             releaseResources()
         }
     }
@@ -220,13 +220,14 @@ object Camera3 {
         player?.clearMediaItems()
         player?.clearVideoSurface()
         surfaceTexture?.setDefaultBufferSize(16, 16)
-//        surface?.release()
-//        surface = null
+        surface?.release()
+        surface = null
     }
     private fun notifyState(state: State) {
         onPlayerStateChangeListener?.invoke(state)
     }
-    fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int = 1080, reqHeight: Int = 1920): Int {
         val (height: Int, width: Int) = options.outHeight to options.outWidth
         var inSampleSize = 1
         if (height > reqHeight || width > reqWidth) {
@@ -239,13 +240,15 @@ object Camera3 {
         return inSampleSize
     }
 
+    /**
+     * 将所有原始surface记录
+     */
     fun markedAsHijacked(origin: Surface) {
         surfaceIsHijacked.add(origin)
     }
     fun isHijacked(origin: Surface): Boolean {
         return surfaceIsHijacked.contains(origin)
     }
-
     fun clearHijackedList() {
         surfaceIsHijacked.clear()
     }

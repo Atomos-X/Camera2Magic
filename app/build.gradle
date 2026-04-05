@@ -53,6 +53,10 @@ android {
         applicationId "com.nothing.camera2magic"
         minSdk 29
         targetSdk 36
+
+//        ndk {
+//            abiFilters "armeabi-v7a", "arm64-v8a"
+//        }
         // versionCode = 偏移量 + Git提交次数，确保比旧版本大
         versionCode versionCodeOffset + gitCommitCount
         versionName "${majorVersion}.${minorVersion}.${patchVersion}"
@@ -71,7 +75,7 @@ android {
         abi {
             enable true
             reset()
-            include ("arm64-v8a", "armeabi-v7a")
+            include ("armeabi-v7a", "arm64-v8a")
             universalApk false
         }
     }

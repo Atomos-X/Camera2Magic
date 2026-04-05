@@ -7,6 +7,7 @@ import androidx.core.content.edit
 import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
+import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 
@@ -25,9 +26,9 @@ enum class MediaSource(val value: Int, val label: String) {
     }
 }
 
-enum class MediaType(val value: Int, val mimeType: String) {
-    VIDEO(0, "video/*"),
-    IMAGE(1, "image/*");
+enum class MediaType(val value: Int, val label: String) {
+    VIDEO(0, "video"),
+    IMAGE(1, "image");
     companion object {
         fun fromValue(value: Int): MediaType {
             return entries.find { it.value == value }
@@ -37,7 +38,6 @@ enum class MediaType(val value: Int, val mimeType: String) {
 }
 
 class ConfigRepository(private val prefs: SharedPreferences) {
-
     private var xposedService: XposedService? = null
 
     init {
@@ -101,19 +101,18 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         }
     }
 
-    fun prepareRemoteMedia(type: String?, inputStream: InputStream) {
-        val result = runCatching {
-            val pfd = xposedService?.openRemoteFile("video.$type")
-            val fos = FileOutputStream(pfd?.fileDescriptor)
-            val buffer = ByteArray(1024 * 32)
-            var read: Int
-            while ((inputStream.read(buffer).also { read = it }) != -1) {
-                fos.write(buffer, 0, read)
+    fun prepareRemoteMedia(label: String, ext: String?, inputStream: InputStream): Boolean {
+        val fileName = if (ext != null) "$label.$ext" else label
+        return runCatching {
+            val pfd = xposedService?.openRemoteFile(fileName) ?: return false
+            pfd.use {
+                FileOutputStream(it.fileDescriptor).use { fos ->
+                    fos.channel.truncate(0)
+                    inputStream.copyTo(fos, 1024 * 32)
+                }
             }
-            fos.flush()
-        }.onFailure {
-            Dog.e(TAG, "写入远程文件失败: ${it.message}", null, enableLog)
-        }
+            true
+        }.getOrDefault(false)
     }
 
     var moduleEnabled: Boolean
@@ -156,23 +155,15 @@ class ConfigRepository(private val prefs: SharedPreferences) {
             }
         }
 
-    var videoId: Long
-        get() = prefs.getLong("local_video_id", -1L)
-        set(value) = save("local_video_id", value)
-
     var videoUri: String?
         get() = prefs.getString("local_video_uri", null)
         set(value) = save("local_video_uri", value)
-
-    var imageId: Long
-        get() = prefs.getLong("local_image_id", -1L)
-        set(value) = save("local_image_id", value)
 
     var imageUri: String?
         get() = prefs.getString("local_image_uri", null)
         set(value) = save("local_image_uri", value)
 
-    var rtspUri: String
-        get() = prefs.getString("network_rtsp_uri", "") ?: ""
+    var rtspUri: String?
+        get() = prefs.getString("network_rtsp_uri", null)
         set(value) = save("network_rtsp_uri", value)
 }
