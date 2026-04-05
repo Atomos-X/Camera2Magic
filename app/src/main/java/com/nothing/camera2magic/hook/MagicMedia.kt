@@ -15,6 +15,6 @@ enum class MagicType(val value: Int, val label: String) {
 }
 
 data class ValidMedia (
-    var uri: Uri,
+    var file: String,
     var type: MagicType
 )

@@ -7,8 +7,6 @@ import android.graphics.Color
 import android.graphics.PorterDuff
 import android.graphics.SurfaceTexture
 
-import android.net.Uri
-
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
@@ -25,8 +23,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import com.nothing.camera2magic.GlobalState
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.utils.Dog
 
 import java.util.Collections
@@ -34,12 +32,15 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.hook.SourceManager as SM
+
 object Camera3 {
     private const val TAG = "[Camera3]"
     private val surfaceIsHijacked = Collections.newSetFromMap(ConcurrentHashMap<Surface, Boolean>())
     @Volatile
     private var initialized = AtomicBoolean(false)
     private var player: ExoPlayer? = null
+
+    private var pfd: ParcelFileDescriptor? = null
     private var imageRendering: Boolean = false
     private var cachedBitmap: Bitmap? = null
     private var oesTextureId: Int = 0
@@ -107,59 +108,79 @@ object Camera3 {
         }
     }
 
-    @OptIn(UnstableApi::class)
-    fun start(pfd: ParcelFileDescriptor) {
+    fun start(magic: MagicHook, validMedia: ValidMedia) {
+        pfd?.close()
+
         if (!initialized.get()) return
         if (surface == null) surface = Surface(surfaceTexture)
-        val volumeValue = if (SM.playSound) 1f else 0f
 
+        val (name, type) = validMedia
+
+        when (type) {
+            MagicType.NETWORK_RTSP -> {}
+            MagicType.LOCAL_VIDEO  -> {
+                pfd = magic.openRemoteFile(name)
+                pfd?.let { handleLocalVideo(it) }
+            }
+
+            MagicType.LOCAL_IMAGE -> {
+                Dog.w(TAG, "加载图片: $name", true)
+                pfd = magic.openRemoteFile(name)
+                pfd?.let { handleLocalImage(it) }
+            }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun handleLocalVideo(pfd: ParcelFileDescriptor) {
+        val volumeValue = if (SM.playSound) 1f else 0f
         val factory = DataSource.Factory { MagicDataSource(pfd) }
-        val mediaSource = ProgressiveMediaSource.Factory(factory)
-            .createMediaSource(MediaItem.fromUri("magic://video"))
+        val mediaSourceFactory = DefaultMediaSourceFactory(factory)
+        val mediaItem = MediaItem.fromUri("LOCAL://VIDEO")
 
         camera3Handler.post {
             player?.apply {
                 volume = volumeValue
                 setVideoSurface(surface)
-                setMediaSource(mediaSource)
+                setMediaSource(mediaSourceFactory.createMediaSource(mediaItem))
                 prepare()
                 playWhenReady = true
             }
         }
     }
 
-    fun start(media: ValidMedia) {
-        if (!initialized.get()) return
-        if (surface == null) surface = Surface(surfaceTexture)
-        when(media.type) {
-            MagicType.LOCAL_IMAGE -> handleImage(media.uri)
-            else -> handleVideo(media.uri)
-        }
-    }
+    private fun handleLocalImage(pfd: ParcelFileDescriptor) {
 
-    private fun handleImage(uri: Uri) {
-        val contentResolver = GlobalState.appContext.contentResolver
         runCatching {
+            val fd = pfd.fileDescriptor
+
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
-                contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, this)
-                }
+            }
+
+            BitmapFactory.decodeFileDescriptor(fd, null, options)
+
+            try {
+                Os.lseek(fd, 0, OsConstants.SEEK_SET)
+            } catch (e: Exception) {
+                Dog.e(TAG, "Failed to seek file descriptor", e, SM.enableLog)
             }
 
             options.inJustDecodeBounds = false
             options.inPreferredConfig = Bitmap.Config.ARGB_8888
             options.inSampleSize = calculateInSampleSize(options)
 
-            val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream, null, options)
-            } ?: throw IllegalStateException("decode image failed.")
+
+            val bitmap = BitmapFactory.decodeFileDescriptor(fd, null, options)
+                ?: throw IllegalStateException("decode image failed.")
 
             NB.updateFrameInfo(bitmap.width, bitmap.height, 0)
             surfaceTexture?.setDefaultBufferSize(bitmap.width, bitmap.height)
             cachedBitmap = bitmap
             imageRendering = true
             camera3Handler.post(imageRenderRunnable)
+        }.onFailure { e ->
+            Dog.e(TAG, "${e.message}", e, true)
         }
     }
 
@@ -182,18 +203,6 @@ object Camera3 {
             surface?.unlockCanvasAndPost(canvas)
         }
     }
-    private fun handleVideo(uri: Uri) {
-        val volumeValue = if (SM.playSound) 1f else 0f
-        camera3Handler.post {
-            player?.apply {
-                volume = volumeValue
-                setVideoSurface(surface)
-                setMediaItem(MediaItem.fromUri(uri))
-                prepare()
-                playWhenReady = true
-            }
-        }
-    }
     fun pause () {
         camera3Handler.post { player?.playWhenReady = false }
     }
@@ -211,6 +220,7 @@ object Camera3 {
         }
     }
     fun releaseResources() {
+        pfd?.close()
         surfaceIsHijacked.clear()
         if (cachedBitmap != null) {
             val tmp = cachedBitmap

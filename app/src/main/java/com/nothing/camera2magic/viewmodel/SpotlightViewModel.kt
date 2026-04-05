@@ -21,19 +21,25 @@ import kotlinx.coroutines.withContext
 
 data class SpotlightUiState(
     val moduleEnabled: Boolean = true,
+    val isProcessing: Boolean = false,
     val selectedMediaSource: MediaSource = MediaSource.LOCAL,
     val currentType: MediaType = MediaType.VIDEO,
+
+    val thumbnails: Map<MediaType, Bitmap?> = emptyMap(),
+    val processingMedia: Set<MediaType> = emptySet()
 )
 
 class SpotlightViewModel(
     private val app: Application,
     private val repository: ConfigRepository
 ) : ViewModel() {
-    private val _thumbnails = MutableStateFlow<Map<MediaType, Bitmap?>>(emptyMap())
-    val thumbnails = _thumbnails.asStateFlow()
 
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState = _uiState.asStateFlow()
+
+    private fun updateState(reducer: (SpotlightUiState) -> SpotlightUiState) {
+        _uiState.update { reducer(it) }
+    }
 
     companion object {
         private const val TAG = "[Spotlight VM]"
@@ -67,6 +73,18 @@ class SpotlightViewModel(
     }
 
     fun onMediaSelected(type: MediaType, uri: Uri) {
+        // 撤销旧uri权限
+        getMediaUri(type)?.let {
+            try {
+                app.contentResolver.releasePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: Exception) {/* 忽略错误 */}
+        }
+
+        updateState { it.copy(
+            processingMedia = it.processingMedia + type,
+            thumbnails = it.thumbnails + (type to null)
+        )}
+
         try {
             val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
             app.contentResolver.takePersistableUriPermission(uri, takeFlags)
@@ -75,27 +93,41 @@ class SpotlightViewModel(
         }
 
         viewModelScope.launch {
+            val mimeType = app.contentResolver.getType(uri)
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+            val fileName = if (extension != null) "${type.label}.${extension}" else type.label
             val success = withContext(Dispatchers.IO) {
                 runCatching {
-                    val mimeType = app.contentResolver.getType(uri)
-                    val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
-
                     app.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        repository.prepareRemoteMedia(type.label, extension, inputStream)
+                        repository.prepareRemoteMedia(fileName, inputStream)
                     } ?: false
 
                 }.getOrDefault(false)
             }
 
             if (success) {
+                saveRemoteFileName(type, fileName)
                 loadAndVerifyMedia(type, uri)
+            } else {
+                clearMediaBy(type)
             }
+
+            updateState { it.copy(processingMedia = it.processingMedia - type) }
         }
     }
     fun clearMediaBy(type: MediaType) {
         when (type) {
-            MediaType.VIDEO -> repository.videoUri = null
-            MediaType.IMAGE -> repository.imageUri = null
+            MediaType.VIDEO -> {
+                repository.remoteVideoFile?.let { repository.deleteRemoteMedia(it) }
+                repository.videoUri = null
+                repository.remoteVideoFile = null
+            }
+
+            MediaType.IMAGE -> {
+                repository.remoteImageFile?.let { repository.deleteRemoteMedia(it) }
+                repository.imageUri = null
+                repository.remoteImageFile = null
+            }
         }
         updateThumbnailState(type, null)
     }
@@ -113,6 +145,14 @@ class SpotlightViewModel(
             MediaType.IMAGE -> repository.imageUri = uri
         }
     }
+
+    private fun saveRemoteFileName(type: MediaType, fileName: String) {
+        when(type) {
+            MediaType.VIDEO -> repository.remoteVideoFile = fileName
+            MediaType.IMAGE -> repository.remoteImageFile = fileName
+        }
+    }
+
     private fun loadInitialSettings() {
         _uiState.update {
             it.copy(
@@ -152,8 +192,8 @@ class SpotlightViewModel(
     }
 
     fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
-        _thumbnails.update { currentMap ->
-            currentMap + (type to thumbnail)
-        }
+        updateState { it.copy(
+            thumbnails = it.thumbnails + (type to thumbnail)
+        ) }
     }
 }

@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import com.nothing.camera2magic.GlobalState
+import com.nothing.camera2magic.utils.Dog
 import java.io.FileNotFoundException
 
 object SourceManager {
@@ -15,8 +16,8 @@ object SourceManager {
     private const val KEY_ENABLE_LOG = "main_enable_log"
     private const val KEY_MEDIA_SOURCE = "media_source" // 0: local, 1: network
     private const val KEY_LOCAL_MEDIA_TYPE = "local_media_type" // 0: video, 1: image
-    private const val KEY_LOCAL_VIDEO_ID = "local_video_id"
-    private const val KEY_LOCAL_IMAGE_ID = "local_image_id"
+    private const val KEY_VIDEO_FILE = "remote_video_file"
+    private const val KEY_IMAGE_FILE = "remote_image_file"
     private const val KEY_NETWORK_RTSP_URI = "network_rtsp_uri"
 
     private lateinit var prefs: SharedPreferences
@@ -39,11 +40,11 @@ object SourceManager {
     @Volatile
     var toastMessage: String? = null
     @Volatile
-    private var videoId: Long = -1L
+    private var videoFile: String? = null
     @Volatile
-    private var imageId: Long = -1L
+    private var imageFile: String? = null
     @Volatile
-    private var rtspUri: String = ""
+    private var rtspUri: String? = null
 
     val readyForHook: Boolean
         get() = moduleEnabled
@@ -56,40 +57,23 @@ object SourceManager {
         refreshPrefs()
     }
 
-    private fun updateState(media: ValidMedia?, message: String) {
-        validMedia = media
-        toastMessage = message
-    }
-
     fun refreshAndDispatch() {
         refreshPrefs()
-        if (!moduleEnabled) {
-            updateState(null, "Module disabled.")
-            return
-        }
-        val magicType = MagicType.fromValue(selectedMedia)
-        val label = magicType.label
-        val rawUri = when(magicType) {
-            MagicType.LOCAL_VIDEO -> ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, videoId)
-            MagicType.LOCAL_IMAGE -> ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId)
-            MagicType.NETWORK_RTSP -> rtspUri.toUri()
-        }
+        val type = MagicType.fromValue(selectedMedia)
+        Dog.w(TAG, "current media type: ${type.label}", enableLog)
 
-        if (magicType == MagicType.NETWORK_RTSP) {
-            updateState(ValidMedia(rawUri, magicType), "$rawUri")
-            return
-        }
-
-        runCatching {
-            GlobalState.appContext.contentResolver.openFileDescriptor(rawUri, "r")?.close()
-            updateState(ValidMedia(rawUri, magicType), "$label file is ready.")
-        }.onFailure { e ->
-            val msg = when (e) {
-                is SecurityException -> "Permission denied: Host app cannot access the $label."
-                is FileNotFoundException -> "$label File not found."
-                else -> "pick the $label file in module ui first."
+        when (type) {
+            MagicType.LOCAL_VIDEO -> {
+                videoFile?.let { validMedia = ValidMedia(it, type) }
             }
-            updateState(null, msg)
+
+            MagicType.LOCAL_IMAGE -> {
+                imageFile?.let { validMedia = ValidMedia(it, type) }
+            }
+
+            MagicType.NETWORK_RTSP -> {
+                rtspUri?.let { validMedia = ValidMedia(it, type) }
+            }
         }
     }
 
@@ -102,11 +86,12 @@ object SourceManager {
 
             mediaSource = prefs.getInt(KEY_MEDIA_SOURCE, 0)
             mediaType = prefs.getInt(KEY_LOCAL_MEDIA_TYPE, 0)
+
             selectedMedia = (mediaSource shl 8) or mediaType
 
-            videoId = prefs.getLong(KEY_LOCAL_VIDEO_ID, -1L)
-            imageId = prefs.getLong(KEY_LOCAL_IMAGE_ID, -1L)
-            rtspUri = prefs.getString(KEY_NETWORK_RTSP_URI, "") ?: ""
+            videoFile = prefs.getString(KEY_VIDEO_FILE, null)
+            imageFile = prefs.getString(KEY_IMAGE_FILE, null)
+            rtspUri = prefs.getString(KEY_NETWORK_RTSP_URI, null)
 
         } catch (e: Exception) { /* Do Nothing */ }
     }

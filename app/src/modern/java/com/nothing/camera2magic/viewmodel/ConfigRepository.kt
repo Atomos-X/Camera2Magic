@@ -59,7 +59,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
                 is Int -> putInt(key, value)
                 is Long -> putLong(key, value)
                 is Float -> putFloat(key, value)
-                is String -> putString(key, value)
+                is String? -> putString(key, value)
                 else -> throw IllegalArgumentException("Unsupported type")
             }
         }
@@ -101,8 +101,7 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         }
     }
 
-    fun prepareRemoteMedia(label: String, ext: String?, inputStream: InputStream): Boolean {
-        val fileName = if (ext != null) "$label.$ext" else label
+    fun prepareRemoteMedia(fileName: String, inputStream: InputStream): Boolean {
         return runCatching {
             val pfd = xposedService?.openRemoteFile(fileName) ?: return false
             pfd.use {
@@ -113,6 +112,10 @@ class ConfigRepository(private val prefs: SharedPreferences) {
             }
             true
         }.getOrDefault(false)
+    }
+
+    fun deleteRemoteMedia(fileName: String) {
+        xposedService?.deleteRemoteFile(fileName)
     }
 
     var moduleEnabled: Boolean
@@ -159,9 +162,17 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         get() = prefs.getString("local_video_uri", null)
         set(value) = save("local_video_uri", value)
 
+    var remoteVideoFile: String?
+        get() = prefs.getString("remote_video_file", null)
+        set(value) = save("remote_video_file", value)
+
     var imageUri: String?
         get() = prefs.getString("local_image_uri", null)
         set(value) = save("local_image_uri", value)
+
+    var remoteImageFile: String?
+        get() = prefs.getString("remote_image_file", null)
+        set(value) = save("remote_image_file", value)
 
     var rtspUri: String?
         get() = prefs.getString("network_rtsp_uri", null)

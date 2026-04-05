@@ -2,6 +2,7 @@ package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Camera
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -32,6 +33,11 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         private const val CAMERA_DEVICE_IMPL = "android.hardware.camera2.impl.CameraDeviceImpl"
         private const val CAPTURE_REQUEST_BUILDER = $$"android.hardware.camera2.CaptureRequest$Builder"
         private var activatedCamera = WeakReference<Any>(null)
+        private var _cameraState = WeakHashMap<Any, CameraState>()
+
+        private val CameraDevice.state: CameraState
+            get() = _cameraState.getOrPut(this) { CameraState(api = 2) }
+
         private val CameraDevice.isActiveRef: Boolean
             get() = activatedCamera.get() == this
 
@@ -75,9 +81,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             CameraCaptureSession::class.java)
 
         magic.hook(onConfigured).intercept { chain ->
-            SM.validMedia?.let { media ->
-                Camera3.start(media)
-            }
+            SM.validMedia?.let { Camera3.start(magic, it) }
             return@intercept chain.proceed()
         }
     }
@@ -194,9 +198,13 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         val removeTarget = getDeclaredMethod("removeTarget", Surface::class.java)
         magic.hook(removeTarget).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
+            val origin = chain.args[0] as Surface
+            Dog.i(TAG, "app wanna removeTarget ${origin.shortId}", SM.enableLog)
+            val (width, height, format) = NB.getSurfaceInfo(origin)
+            if (format != 1) return@intercept chain.proceed()
             val newArgs = chain.args.toTypedArray()
             newArgs[0] = BlackHole.surface
-            chain.proceed(newArgs)
+            return@intercept chain.proceed(newArgs)
         }
     }
 }

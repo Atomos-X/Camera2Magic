@@ -1,5 +1,8 @@
 package com.nothing.camera2magic.hook
 
+import android.util.Size
+import android.view.Surface
+
 enum class WorkMode(val value: Int, val label: String) {
     TAKE_PICTURE(0, "NORMAL"),
     NORMAL(1, "FACE DETECTION"),
@@ -13,3 +16,14 @@ enum class WorkMode(val value: Int, val label: String) {
         }
     }
 }
+
+data class CameraState (
+    var api: Int = 0,
+    var facingFront: Boolean = false,
+    var sensorOri: Int = 0,
+    var displayOri: Int = 0,
+    var previewSize: Size = Size(0, 0),
+    var pictureSize: Size = Size(0, 0),
+    var surface: Surface? = null,
+    var packageName: String = "",
+)
