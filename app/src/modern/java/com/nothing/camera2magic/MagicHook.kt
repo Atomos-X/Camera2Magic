@@ -20,8 +20,8 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 class MagicHook : XposedModule() {
     companion object {
         private const val TAG = "[MagicHook]"
-        private var isInitialized = false
         private lateinit var packageName: String
+
         private val mainProcess: Boolean
             get() = Application.getProcessName() == packageName
     }
@@ -30,7 +30,7 @@ class MagicHook : XposedModule() {
     override fun onPackageReady(param: PackageReadyParam) {
         if (!param.isFirstPackage) return
         packageName = param.packageName
-        GlobalState.packageName = param.packageName
+        GlobalState.processName = Application.getProcessName()
         val remotePrefs = getRemotePreferences("camera_magic_config")
         SM.init(remotePrefs)
         Application::class.java.onCreateHook()
@@ -43,11 +43,9 @@ class MagicHook : XposedModule() {
     private fun Class<*>.onCreateHook() {
         val onCreate = getDeclaredMethod("onCreate")
         hook(onCreate).intercept { chain ->
-            if (isInitialized) return@intercept chain.proceed()
             val app =  chain.thisObject as Application
-
             GlobalState.appContext = app.also {
-                if (mainProcess) it.initCamera3()
+                it.initCamera3()
                 registerForegroundChecker(it)
             }
             return@intercept chain.proceed()

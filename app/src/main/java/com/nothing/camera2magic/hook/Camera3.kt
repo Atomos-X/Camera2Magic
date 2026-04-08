@@ -39,7 +39,6 @@ object Camera3 {
     @Volatile
     private var initialized = AtomicBoolean(false)
     private var player: ExoPlayer? = null
-
     private var pfd: ParcelFileDescriptor? = null
     private var imageRendering: Boolean = false
     private var cachedBitmap: Bitmap? = null
@@ -77,7 +76,7 @@ object Camera3 {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            Dog.e(TAG, "播放失败原因: ${error.errorCodeName} - ${error.message}", error, true)
+            Dog.e(TAG, "${error.errorCodeName} - ${error.message}", error, true)
             notifyState(State.ERROR)
         }
     }
@@ -90,7 +89,6 @@ object Camera3 {
         camera3Handler = Handler(thread.looper)
 
         camera3Handler.post {
-            Dog.w(TAG, "init camera3..", SM.enableLog)
 
             oesTextureId = NB.createOESTexture()
             surfaceTexture = SurfaceTexture(oesTextureId).apply {
@@ -105,6 +103,7 @@ object Camera3 {
                 repeatMode = Player.REPEAT_MODE_ALL
                 addListener(playerListener)
             }
+            Dog.i(TAG, "camera3 initialized.", SM.enableLog)
         }
     }
 
@@ -232,6 +231,7 @@ object Camera3 {
         pfd?.close()
         pfd = null
     }
+
     private fun notifyState(state: State) {
         onPlayerStateChangeListener?.invoke(state)
     }

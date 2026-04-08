@@ -186,7 +186,8 @@ class SpotlightViewModel(
                 saveMediaUri(type, targetUri.toString())
             } else {
                 updateThumbnailState(type, null)
-                if (uriOverride == null) saveMediaUri(type, null)
+                clearMediaBy(type)
+                //if (uriOverride == null) saveMediaUri(type, null)
             }
         }
     }

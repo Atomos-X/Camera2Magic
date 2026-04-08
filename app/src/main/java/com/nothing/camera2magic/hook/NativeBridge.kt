@@ -46,14 +46,13 @@ object NativeBridge {
     @JvmStatic
     external fun getSurfaceInfo(surface: Surface): IntArray
     @JvmStatic
-    external fun updateCameraBaseData(api: Int, facingFront: Boolean, sensorOri: Int, displayOri: Int)
+    external fun updateCameraBaseData(api: Int, facingFront: Boolean, sensorOri: Int, displayOri: Int, processName: String)
     @JvmStatic
     external fun setDisplayOrientation(displayOri: Int)
     @JvmStatic
     external fun updateManualRotation(rotation: Int)
     @JvmStatic
-    external fun updateCameraExtendedData(surface: Surface, active: Boolean,
-                                          vWidth: Int, vHeight: Int, pWidth: Int, pHeight: Int)
+    external fun updateCameraExtendedData(surface: Surface, vWidth: Int, vHeight: Int, pWidth: Int, pHeight: Int)
     @JvmStatic
     external fun updateCameraExtendedData(surface: Surface)
     @JvmStatic

@@ -79,8 +79,6 @@ object SourceManager {
             MagicType.NETWORK_RTSP -> rtspUri
         }
 
-        Dog.w(TAG, "$label: $source", true)
-
         if (source == null) {
             updateState(null, "$label does not exist")
             return

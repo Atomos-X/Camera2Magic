@@ -52,6 +52,24 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         })
     }
 
+    private fun <R> safeExecute(default: R, block: (XposedService) -> R): R {
+        val service = xposedService ?: return default
+        return runCatching {
+            block(service)
+        }.onFailure { e ->
+            Dog.e(TAG, "[:IPC Error] ${e.message}", e, enableLog)
+        }.getOrDefault(default)
+    }
+
+    private fun safeExecute(block: (XposedService) -> Unit) {
+        val service = xposedService ?: return
+        runCatching {
+            block(service)
+        }.onFailure { e ->
+            Dog.e(TAG, "[:IPC Error] ${e.message}", e, enableLog)
+        }
+    }
+
     private fun SharedPreferences.Editor.putAny(key: String, value: Any?) {
         when (value) {
             is Boolean -> putBoolean(key, value)
@@ -64,13 +82,10 @@ class ConfigRepository(private val prefs: SharedPreferences) {
     }
 
     private fun <T> save(key: String, value: T?) {
-
-
         prefs.edit { putAny(key, value) }
-
-        xposedService?.let { service ->
-            runCatching {
-                service.getRemotePreferences(GROUP_NAME).edit { putAny(key, value) }
+        safeExecute { service ->
+            service.getRemotePreferences(GROUP_NAME).edit {
+                putAny(key, value)
             }
         }
     }
@@ -86,21 +101,24 @@ class ConfigRepository(private val prefs: SharedPreferences) {
         }
     }
 
+    fun getScopeAppList(): List<String>? {
+        return safeExecute(null) { it.scope }
+    }
+
     fun prepareRemoteMedia(fileName: String, inputStream: InputStream): Boolean {
-        return runCatching {
-            val pfd = xposedService?.openRemoteFile(fileName) ?: return false
-            pfd.use {
+        return safeExecute(false) { service ->
+            service.openRemoteFile(fileName).use {
                 FileOutputStream(it.fileDescriptor).use { fos ->
                     fos.channel.truncate(0)
                     inputStream.copyTo(fos, 1024 * 32)
                 }
             }
             true
-        }.getOrDefault(false)
+        }
     }
 
     fun deleteRemoteMedia(fileName: String) {
-        xposedService?.deleteRemoteFile(fileName)
+        safeExecute { it.deleteRemoteFile(fileName) }
     }
 
     var moduleEnabled: Boolean

@@ -3,6 +3,7 @@ package com.nothing.camera2magic.hook
 import android.media.Image
 import android.media.ImageReader
 import com.nothing.camera2magic.hook.NativeBridge as NB
+import com.nothing.camera2magic.hook.SourceManager as SM
 import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
@@ -32,7 +33,7 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
             Int::class.java, Int::class.java, Int::class.java, Int::class.java)
         magic.hook(newInstance).intercept { chain ->
             val reader = chain.proceed() as ImageReader
-            Dog.w(TAG, "ImageReader: ${chain.args.size} args: ${chain.args} ${reader.surface.shortId}", true)
+            Dog.i(TAG, "[:newInstance] 4 args, ${reader.surface.shortId} format: ${reader.imageFormat}, size: ${reader.width}x${reader.height}", SM.enableLog)
             return@intercept reader
         }
     }
@@ -41,9 +42,8 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
             Int::class.java, Int::class.java, Int::class.java, Int::class.java, Long::class.java)
         magic.hook(newInstance).intercept { chain ->
             val reader = chain.proceed() as ImageReader
-            if (!Camera3.isHijacked(reader.surface)) {
-                Dog.w(TAG, "ImageReader: ${chain.args.size} args: ${chain.args} ${reader.surface.shortId}", true)
-            }
+            val args = chain.args
+            Dog.i(TAG, "[:newInstance] 5 args, ${reader.surface.shortId}, format: ${args[2]}, size: ${args[0]}x${args[1]}", SM.enableLog)
             return@intercept reader
         }
     }
@@ -52,7 +52,7 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
         val acquireNextImage = getDeclaredMethod("acquireNextImage")
         magic.hook(acquireNextImage).intercept { chain ->
             val reader = chain.thisObject as ImageReader
-            if (Camera3.isHijacked(reader.surface)) return@intercept chain.proceed()
+            if (!Camera3.isHijacked(reader.surface)) return@intercept chain.proceed()
             val image = chain.proceed() as? Image ?: return@intercept null
             val format = image.format
 

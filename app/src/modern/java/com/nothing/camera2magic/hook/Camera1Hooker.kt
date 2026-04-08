@@ -3,15 +3,11 @@
 package com.nothing.camera2magic.hook
 
 import android.annotation.SuppressLint
-import android.content.res.AssetFileDescriptor
 
 import android.hardware.Camera
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.graphics.SurfaceTexture
-import android.media.MediaPlayer
-import androidx.core.net.toUri
-import com.nothing.camera2magic.GlobalState
 
 import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.utils.Dog
@@ -19,17 +15,13 @@ import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.hook.SourceManager as SM
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
-import java.io.FileInputStream
-import java.io.FileReader
 import java.lang.ref.WeakReference
 import java.lang.reflect.Proxy
 import java.util.Collections
 import java.util.WeakHashMap
-import android.system.Os
-import android.system.OsConstants
-import android.util.Log
 import android.util.Size
-import javax.sql.DataSource
+import com.nothing.camera2magic.GlobalState
+import com.nothing.camera2magic.hook.Camera3.initCamera3
 
 @SuppressLint("Recycle")
 class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManager  {
@@ -37,12 +29,18 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         private const val TAG = "[CAM1]"
         private const val CLS_CAMERA = "android.hardware.Camera"
         private var activatedCamera = WeakReference<Any>(null)
+        ///////////
+        private const val API = 1
+        private var facingFront = false
+        private var sensorOri = 0
+        private var displayOri = 0
+        private val processName: String
+            get() = GlobalState.processName
 
-        private val _cameraState = WeakHashMap<Any, CameraState>()
-
-        private val Camera.state: CameraState
-            get() = _cameraState.getOrPut(this) { CameraState(api = 1) }
-
+        private var vSize = Size(0, 0)
+        private var pSize = Size(0, 0)
+        private var cachedOriginSurface = WeakReference<Surface>(null)
+        /////////////
         private val Camera.isActiveRef: Boolean
             get() = activatedCamera.get() == this
     }
@@ -53,9 +51,10 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         val info = Camera.CameraInfo()
         Camera.getCameraInfo(cameraId, info)
         activatedCamera = WeakReference(camera)
-        camera.state.facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
-        camera.state.sensorOri = info.orientation
+        facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+        sensorOri = info.orientation
         Dog.i(TAG, "${camera.shortId} open.", SM.enableLog)
+        //GlobalState.appContext.initCamera3()
         return@intercept camera
     }
 
@@ -79,8 +78,13 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             stopPreviewHook()
             releaseHook()
             setPreviewCallbackHook()
+            addCallbackBufferHook()
             takePictureHook()
         }
+    }
+
+    private fun Camera.Size.toSize(): Size {
+        return Size(this.width, this.height)
     }
     private fun Class<*>.openHook() {
         val open = getDeclaredMethod("open")
@@ -91,10 +95,9 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
     private fun Class<*>.setParametersHook() {
         val setParameters = getDeclaredMethod("setParameters", Camera.Parameters::class.java)
         magic.hook(setParameters).intercept { chain ->
-            val camera = chain.thisObject as Camera
             val params = chain.args[0] as Camera.Parameters
-            camera.state.pictureSize = Size(params.previewSize.width, params.previewSize.height)
-            camera.state.previewSize = Size(params.pictureSize.width, params.pictureSize.height)
+            vSize = params.previewSize.toSize()
+            pSize = params.pictureSize.toSize()
             return@intercept chain.proceed()
         }
     }
@@ -103,10 +106,10 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             SurfaceTexture::class.java)
         magic.hook(setPreviewTexture).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
-            val camera = chain.thisObject as Camera
             val surfaceTexture = chain.args[0] as SurfaceTexture
+            surfaceTexture.setDefaultBufferSize(vSize.width, vSize.height)
             @SuppressLint("Recycle")
-             camera.state.surface = Surface(surfaceTexture)
+             cachedOriginSurface = WeakReference(Surface(surfaceTexture))
 
             val newArgs = chain.args.toTypedArray()
             newArgs[0] = BlackHole.surfaceTexture
@@ -119,11 +122,9 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             SurfaceHolder::class.java)
         magic.hook(setPreviewDisplay).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
-            val camera = chain.thisObject as Camera
             val holder = chain.args[0] as SurfaceHolder
-            camera.state.surface = holder.surface
+            cachedOriginSurface = WeakReference(holder.surface)
             @SuppressLint("Recycle")
-
             val surfaceHolderProxy = Proxy.newProxyInstance(holder.javaClass.classLoader,
                 arrayOf(SurfaceHolder::class.java)) { _, method, args ->
                 if (method.name == "getSurface") return@newProxyInstance BlackHole.surface
@@ -140,8 +141,8 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(setDisplayOrientation).intercept { chain ->
             val camera = chain.thisObject as Camera
             val displayOrientation = chain.args[0] as Int
-            if (!SM.readyForHook || camera.state.displayOri == displayOrientation) return@intercept chain.proceed()
-            camera.state.displayOri = displayOrientation
+            if (!SM.readyForHook || displayOri == displayOrientation) return@intercept chain.proceed()
+            displayOri = displayOrientation
             if (camera.isActiveRef) NB.setDisplayOrientation(displayOrientation)
             chain.proceed()
         }
@@ -153,14 +154,11 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             if (!SM.readyForHook) return@intercept chain.proceed()
             val camera = chain.thisObject as Camera
             if (camera.isActiveRef) {
-                val s = camera.state
-                NB.updateCameraBaseData(s.api, s.facingFront, s.sensorOri, s.displayOri)
-                s.surface?.let {
-                    NB.updateCameraExtendedData(it, true,
-                        s.previewSize.width, s.previewSize.height,
-                        s.pictureSize.width, s.pictureSize.height)
-                    SM.validMedia?.let { Camera3.start(magic, it) }
+                NB.updateCameraBaseData(API, facingFront, sensorOri, displayOri, processName)
+                cachedOriginSurface.get()?.let { surface ->
+                    NB.updateCameraExtendedData(surface, vSize.width, vSize.height, pSize.width, pSize.height)
                 }
+                SM.validMedia?.let { Camera3.start(magic, it) }
             }
             chain.proceed()
         }
@@ -207,6 +205,21 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(setPreviewCallbackWithBuffer).intercept(previewCallbackInterceptor)
         magic.hook(setOneShotPreviewCallback).intercept(previewCallbackInterceptor)
     }
+
+    private fun Class<*>.addCallbackBufferHook() {
+        /*
+        val addCallbackBuffer = getDeclaredMethod("addCallbackBuffer",
+            ByteArray::class.java)
+
+        magic.hook(addCallbackBuffer).intercept { chain ->
+            val buffer = chain.args[0] as ByteArray
+            Dog.i(TAG, "add buffer[${buffer.size}]", SM.enableLog)
+            chain.proceed()
+        }
+
+        */
+    }
+
     private fun Class<*>.onPictureTakenHook() {
         val onPictureTaken = getDeclaredMethod("onPictureTaken",
             ByteArray::class.java, Camera::class.java)
