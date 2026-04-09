@@ -36,12 +36,6 @@ def startTasks = gradle.startParameter.taskNames
 def isExplicitNativeBuild = startTasks.any { it.contains("buildNative") }
 
 android {
-    flavorDimensions.add("api")
-
-    productFlavors {
-        register("legacy") { dimension = "api" }
-        register("modern") { dimension = "api" }
-    }
 
     namespace 'com.nothing.camera2magic'
     compileSdk {
@@ -57,6 +51,7 @@ android {
 //        ndk {
 //            abiFilters "armeabi-v7a", "arm64-v8a"
 //        }
+
         // versionCode = 偏移量 + Git提交次数，确保比旧版本大
         versionCode versionCodeOffset + gitCommitCount
         versionName "${majorVersion}.${minorVersion}.${patchVersion}"
@@ -79,6 +74,7 @@ android {
             universalApk false
         }
     }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -94,7 +90,6 @@ android {
                 def abi = output.filters.find {
                     it.filterType == FilterConfiguration.FilterType.ABI
                 }?.identifier
-                def flavor = variant.flavorName
                 def fileName = "CAM2Magic-${majorVersion}.${minorVersion}.${patchVersion}-${abi}.apk"
                 output.outputFileName.set(fileName)
             }
@@ -163,8 +158,8 @@ tasks.register("buildNative", Copy) {
     group = "native"
     description = "编译 C++ 产物并同步到 jniLibs (基于 Modern Release)"
 
-    def targetVariant = "modernRelease"
-    def stripTaskName = "stripModernReleaseDebugSymbols"
+    def targetVariant = "release"
+    def stripTaskName = "stripReleaseDebugSymbols"
 
     dependsOn stripTaskName
     outputs.upToDateWhen { false }
@@ -189,9 +184,8 @@ tasks.register("buildNative", Copy) {
 }
 
 dependencies {
-    legacyCompileOnly "de.robv.android.xposed:api:82"
-    modernCompileOnly 'io.github.libxposed:api:101.0.1'
-    modernImplementation 'io.github.libxposed:service:101.0.0'
+    compileOnly 'io.github.libxposed:api:101.0.1'
+    implementation 'io.github.libxposed:service:101.0.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0"
     implementation "com.google.accompanist:accompanist-permissions:0.37.3"
