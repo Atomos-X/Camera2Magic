@@ -54,7 +54,6 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
         sensorOri = info.orientation
         Dog.i(TAG, "${camera.shortId} open.", SM.enableLog)
-        //GlobalState.appContext.initCamera3()
         return@intercept camera
     }
 

@@ -2,18 +2,14 @@ package com.nothing.camera2magic
 
 import android.app.Activity
 import android.app.Application
-import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
-import androidx.core.net.toUri
 import com.nothing.camera2magic.hook.Camera1Hooker
 import com.nothing.camera2magic.hook.Camera3.initCamera3
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager as SM
 import com.nothing.camera2magic.hook.ImageReaderHooker
 import com.nothing.camera2magic.hook.WebRTCHooker
-import com.nothing.camera2magic.hook.shortId
-import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
@@ -45,7 +41,7 @@ class MagicHook : XposedModule() {
         hook(onCreate).intercept { chain ->
             val app =  chain.thisObject as Application
             GlobalState.appContext = app.also {
-                it.initCamera3()
+                if (mainProcess) it.initCamera3()
                 registerForegroundChecker(it)
             }
             return@intercept chain.proceed()
