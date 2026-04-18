@@ -51,8 +51,6 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
     private fun Class<*>.acquireNextImageHook() {
         val acquireNextImage = getDeclaredMethod("acquireNextImage")
         magic.hook(acquireNextImage).intercept { chain ->
-            val reader = chain.thisObject as ImageReader
-            if (!Camera3.isHijacked(reader.surface)) return@intercept chain.proceed()
             val image = chain.proceed() as? Image ?: return@intercept null
             val format = image.format
 
@@ -61,7 +59,7 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
                 return@intercept image
             }
 
-            if (format == 35) handleFormat35(image)
+            //if (format == 35) handleFormat35(image)
 
             return@intercept image
         }

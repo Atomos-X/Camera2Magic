@@ -41,7 +41,8 @@ android {
     compileSdk {
         version = release(36)
     }
-    ndkVersion = "27.0.12077973"
+    //ndkVersion = "27.0.12077973"
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId "com.nothing.camera2magic"

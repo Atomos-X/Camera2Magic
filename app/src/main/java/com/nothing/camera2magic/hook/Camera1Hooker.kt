@@ -21,6 +21,8 @@ import java.util.Collections
 import java.util.WeakHashMap
 import android.util.Size
 import com.nothing.camera2magic.GlobalState
+import com.nothing.camera2magic.hook.BlackHole.gocBlackHole
+import com.nothing.camera2magic.hook.BlackHole.gocBlackHoleTexture
 import com.nothing.camera2magic.hook.Camera3.initCamera3
 
 @SuppressLint("Recycle")
@@ -39,7 +41,6 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
 
         private var vSize = Size(0, 0)
         private var pSize = Size(0, 0)
-        private var cachedOriginSurface = WeakReference<Surface>(null)
         /////////////
         private val Camera.isActiveRef: Boolean
             get() = activatedCamera.get() == this
@@ -54,6 +55,7 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         facingFront = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
         sensorOri = info.orientation
         Dog.i(TAG, "${camera.shortId} open.", SM.enableLog)
+        GlobalState.appContext.initCamera3()
         return@intercept camera
     }
 
@@ -107,11 +109,9 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             if (!SM.readyForHook) return@intercept chain.proceed()
             val surfaceTexture = chain.args[0] as SurfaceTexture
             surfaceTexture.setDefaultBufferSize(vSize.width, vSize.height)
-            @SuppressLint("Recycle")
-             cachedOriginSurface = WeakReference(Surface(surfaceTexture))
 
             val newArgs = chain.args.toTypedArray()
-            newArgs[0] = BlackHole.surfaceTexture
+            newArgs[0] = Surface(surfaceTexture).gocBlackHoleTexture
             chain.proceed(newArgs)
         }
     }
@@ -122,11 +122,11 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(setPreviewDisplay).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
             val holder = chain.args[0] as SurfaceHolder
-            cachedOriginSurface = WeakReference(holder.surface)
+
             @SuppressLint("Recycle")
             val surfaceHolderProxy = Proxy.newProxyInstance(holder.javaClass.classLoader,
                 arrayOf(SurfaceHolder::class.java)) { _, method, args ->
-                if (method.name == "getSurface") return@newProxyInstance BlackHole.surface
+                if (method.name == "getSurface") return@newProxyInstance holder.surface.gocBlackHole
                 return@newProxyInstance method.invoke(holder, *(args ?: arrayOfNulls<Any>(0)))
             } as SurfaceHolder
             chain.proceed(arrayOf(surfaceHolderProxy))
@@ -138,12 +138,8 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             Int::class.javaPrimitiveType)
 
         magic.hook(setDisplayOrientation).intercept { chain ->
-            val camera = chain.thisObject as Camera
-            val displayOrientation = chain.args[0] as Int
-            if (!SM.readyForHook || displayOri == displayOrientation) return@intercept chain.proceed()
-            displayOri = displayOrientation
-            if (camera.isActiveRef) NB.setDisplayOrientation(displayOrientation)
-            chain.proceed()
+            displayOri = chain.args[0] as Int
+            return@intercept chain.proceed()
         }
     }
 
@@ -154,8 +150,8 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             val camera = chain.thisObject as Camera
             if (camera.isActiveRef) {
                 NB.updateCameraBaseData(API, facingFront, sensorOri, displayOri, processName)
-                cachedOriginSurface.get()?.let { surface ->
-                    NB.updateCameraExtendedData(surface, vSize.width, vSize.height, pSize.width, pSize.height)
+                BlackHole.originSurfaces.forEach { surface ->
+                    NB.addRenderTarget(surface, vSize.width, vSize.height, pSize.width, pSize.height)
                 }
                 SM.validMedia?.let { Camera3.start(magic, it) }
             }
@@ -167,7 +163,9 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(stopPreview).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
             val camera = chain.thisObject as Camera
-            if (camera.isActiveRef) Camera3.pause()
+            if (camera.isActiveRef) {
+                Camera3.pause()
+            }
             chain.proceed()
         }
     }
@@ -176,7 +174,11 @@ class Camera1Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(release).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
             val camera = chain.thisObject as Camera
-            if (camera.isActiveRef) Camera3.stop()
+            if (camera.isActiveRef) {
+                NB.clearTargets()
+                Camera3.stop()
+                BlackHole.clear()
+            }
             Dog.i(TAG, "${camera.shortId} close.", SM.enableLog)
             chain.proceed()
         }

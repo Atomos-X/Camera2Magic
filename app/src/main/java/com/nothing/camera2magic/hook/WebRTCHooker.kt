@@ -1,6 +1,7 @@
 package com.nothing.camera2magic.hook
 
 import com.nothing.camera2magic.MagicHook
+import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.utils.Dog
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
@@ -24,8 +25,12 @@ class WebRTCHooker(val magic: MagicHook, param: PackageReadyParam) : HookManager
                 handleMessage(msg)
             }
             if (tag == "Camera2Session" && msg.contains("Stop Camera2 session", ignoreCase = true)) {
+                Camera3.stop()
+                NB.clearTargets()
+                BlackHole.clear()
+                Camera3.clearHijackedList()
                 manualRotation = 0
-                NativeBridge.updateManualRotation(0)
+                NB.updateManualRotation(0)
             }
             chain.proceed()
         }
@@ -50,7 +55,7 @@ class WebRTCHooker(val magic: MagicHook, param: PackageReadyParam) : HookManager
             if (manualRotation != rotation) {
                 Dog.i(TAG, "WebRTC set rotation: $rotation", SourceManager.enableLog)
                 manualRotation = rotation
-                NativeBridge.updateManualRotation(rotation)
+                NB.updateManualRotation(rotation)
             }
         }
     }

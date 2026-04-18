@@ -9,13 +9,14 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.os.Handler
-import android.os.Looper
 import android.view.Surface
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicHook
+import com.nothing.camera2magic.hook.BlackHole.getBlackHole
+import com.nothing.camera2magic.hook.BlackHole.gocBlackHole
 import com.nothing.camera2magic.hook.Camera3.initCamera3
 import com.nothing.camera2magic.hook.SourceManager as SM
 import com.nothing.camera2magic.hook.NativeBridge as NB
@@ -24,31 +25,36 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.lang.ref.WeakReference
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.Executor
 
 @SuppressLint("PrivateApi")
 class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManager {
 
-    override val hookedClasses: MutableSet<Class<*>> = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
     companion object {
         private const val TAG = "[CAM2]"
         private const val CAMERA_DEVICE_IMPL = "android.hardware.camera2.impl.CameraDeviceImpl"
+        private const val CAMERA_MANAGER = "android.hardware.camera2.CameraManager"
         private const val CAPTURE_REQUEST_BUILDER = $$"android.hardware.camera2.CaptureRequest$Builder"
         private var activatedCamera = WeakReference<Any>(null)
         private val processName: String
             get() = GlobalState.processName
-
         private val CameraDevice.isActiveRef: Boolean
             get() = activatedCamera.get() == this
-
-        private var cachedOriginSurface = WeakReference<Surface>(null)
     }
+
+    override val hookedClasses: MutableSet<Class<*>> = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap()))
+
 
     init {
         val classLoader = param.classLoader
+
+        classLoader.safeHook(CAMERA_MANAGER) {
+            openCameraHook()
+        }
+
         classLoader.safeHook(CAMERA_DEVICE_IMPL) {
             createCaptureSessionWithConfigurationHook()
             createCaptureSessionWithSurfacesHook()
-            closeHook()
         }
 
         classLoader.safeHook(CAPTURE_REQUEST_BUILDER) {
@@ -56,7 +62,6 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             removeTargetHook()
         }
     }
-
 
     private fun CameraDevice.updateBaseData() {
         val cameraId = this.id
@@ -74,12 +79,64 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         activatedCamera = WeakReference(this)
     }
 
+    private fun Class<*>.onOpenedHook() {
+        val onOpened = getDeclaredMethod("onOpened", CameraDevice::class.java)
+        magic.hook(onOpened).intercept { chain ->
+
+            val camera = chain.args[0] as CameraDevice
+            camera.updateBaseData()
+            Dog.w(TAG, "open camera: ${camera.shortId}", SM.enableLog)
+            return@intercept chain.proceed()
+        }
+    }
+
+    private fun Class<*>.onClosedHook() {
+        val onClosed = getDeclaredMethod("onClosed", CameraDevice::class.java)
+        magic.hook(onClosed).intercept { chain ->
+            val camera = chain.args[0] as CameraDevice
+            if (camera.isActiveRef) {
+                Camera3.stop()
+                NB.clearTargets()
+                BlackHole.clear()
+                Camera3.clearHijackedList()
+            }
+            Dog.w(TAG, "close camera: ${camera.shortId}", SM.enableLog)
+            return@intercept chain.proceed()
+        }
+    }
+    private fun Class<*>.openCameraHook() {
+        val openCamera = getDeclaredMethod("openCamera",
+            String::class.java, CameraDevice.StateCallback::class.java, Handler::class.java)
+        magic.hook(openCamera).intercept { chain ->
+            GlobalState.appContext.initCamera3()
+            val stateCallBack = chain.args[1] as CameraDevice.StateCallback
+            stateCallBack.javaClass.safeHook {
+                onOpenedHook()
+                onClosedHook()
+            }
+            return@intercept chain.proceed()
+        }
+
+        val openCameraWithExecutor = getDeclaredMethod("openCamera",
+            String::class.java, Executor::class.java, CameraDevice.StateCallback::class.java)
+        magic.hook(openCameraWithExecutor).intercept { chain ->
+            val stateCallBack = chain.args[2] as CameraDevice.StateCallback
+            stateCallBack.javaClass.safeHook {
+                onOpenedHook()
+                onClosedHook()
+            }
+            return@intercept chain.proceed()
+        }
+    }
+
     @OptIn(UnstableApi::class)
     private fun Class<*>.onConfiguredHook() {
         val onConfigured = getDeclaredMethod("onConfigured",
             CameraCaptureSession::class.java)
 
         magic.hook(onConfigured).intercept { chain ->
+            Dog.i(TAG, "[:onConfigured] ${BlackHole.originSurfaces.size} surface need to send.", SM.enableLog)
+            BlackHole.originSurfaces.forEach { NB.addRenderTarget(it) }
             SM.validMedia?.let { Camera3.start(magic, it) }
             return@intercept chain.proceed()
         }
@@ -93,50 +150,38 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             chain.proceed()
         }
     }
-    private fun handleStateCallback(callback: CameraCaptureSession.StateCallback) {
-        callback.javaClass.safeHook {
-            onConfiguredHook()
-            onConfigureFailedHook()
-        }
-    }
     private fun Class<*>.createCaptureSessionWithConfigurationHook() {
         val createCaptureSession = getDeclaredMethod(
             "createCaptureSession",
             SessionConfiguration::class.java)
         magic.hook(createCaptureSession).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
-            val camera = chain.thisObject as CameraDevice
-            camera.updateBaseData()
 
             val sessionConfiguration = chain.args[0] as SessionConfiguration
+
+            sessionConfiguration.stateCallback.javaClass.safeHook {
+                onConfiguredHook()
+                onConfigureFailedHook()
+            }
 
             @SuppressLint("SoonBlockedPrivateApi")
             val field = OutputConfiguration::class.java.getDeclaredField("mSurfaces")
             field.isAccessible = true
             sessionConfiguration.outputConfigurations.forEach { outputConfiguration ->
-                var modified = false
                 val surfaces = outputConfiguration.surfaces
+                Dog.i(TAG, "[:createCaptureSession] outputConfiguration: $surfaces", SM.enableLog)
 
-                val targetSurface = surfaces.find { NB.getSurfaceInfo(it)[2] == 1 }
-                    ?: surfaces.find { NB.getSurfaceInfo(it)[2] == 4 }
-                Dog.i(TAG, "[:createCaptureSession] ${surfaces.size} in outputConfiguration, target: ${targetSurface.shortId}", SM.enableLog)
-
-                val modifiedSurfaces = surfaces.mapTo(ArrayList()) { origin ->
-                    Camera3.markedAsHijacked(origin)
-                    if (origin == targetSurface) {
-                        modified = true
-                        cachedOriginSurface = WeakReference(origin)
-                        NB.updateCameraExtendedData(origin)
-                        return@mapTo BlackHole.surface
-                    }
-                    return@mapTo origin
+                val modifiedSurfaces = surfaces.map { origin ->
+                    val (w, h ,f) = NB.getSurfaceInfo(origin)
+                    if (f == 1 || f == 4) return@map origin.gocBlackHole
+                    return@map origin
                 }
-                if (modified) field.set(outputConfiguration, modifiedSurfaces)
+                field.set(outputConfiguration, modifiedSurfaces)
             }
-            handleStateCallback(sessionConfiguration.stateCallback)
             chain.proceed()
         }
     }
+
     private fun Class<*>.createCaptureSessionWithSurfacesHook() {
         val createCaptureSession = getDeclaredMethod(
             "createCaptureSession",
@@ -145,44 +190,29 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             Handler::class.java)
         magic.hook(createCaptureSession).intercept { chain ->
             if (!SM.readyForHook) return@intercept chain.proceed()
-            val camera = chain.thisObject as CameraDevice
-            camera.updateBaseData()
-            @Suppress("UNCHECKED_CAST")
-            val surfaces = chain.args[0] as List<Surface>
-            val targetSurface = surfaces.find { NB.getSurfaceInfo(it)[2] == 1 }
-                ?: surfaces.find { NB.getSurfaceInfo(it)[2] == 4 }
-            Dog.i(TAG, "[:createCaptureSession] ${surfaces.size} in List<Surface>, target: ${targetSurface.shortId}", SM.enableLog)
-            val newList = surfaces.mapTo(ArrayList()) { origin ->
-                Camera3.markedAsHijacked(origin)
-                if (origin == targetSurface) {
-                    cachedOriginSurface = WeakReference(origin)
-                    NB.updateCameraExtendedData(origin)
-                    return@mapTo BlackHole.surface
-                }
-                return@mapTo origin
-            }
 
             val stateCallback = chain.args[1] as CameraCaptureSession.StateCallback
-            handleStateCallback(stateCallback)
+            stateCallback.javaClass.safeHook {
+                onConfiguredHook()
+                onConfigureFailedHook()
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            val surfaces = chain.args[0] as List<Surface>
+            val count = surfaces.size
+            Dog.i(TAG, "[:createCaptureSession] List<Surface>: $surfaces", SM.enableLog)
+            val newList = surfaces.mapTo(ArrayList()) { origin ->
+                val (w, h, f) = NB.getSurfaceInfo(origin)
+                if (f == 1 || f == 4) return@mapTo origin.gocBlackHole
+                return@mapTo origin
+            }
 
             val newArgs = chain.args.toTypedArray()
             newArgs[0] = newList
             chain.proceed(newArgs)
         }
     }
-    private fun Class<*>.closeHook() {
-        val close = getDeclaredMethod("close")
-        magic.hook(close).intercept { chain ->
-            val camera = chain.thisObject as CameraDevice
-            if (camera.isActiveRef) {
-                Camera3.stop()
-                Dog.w(TAG, "stop renderer for: $camera.", SM.enableLog)
-                cachedOriginSurface.clear()
-                Camera3.clearHijackedList()
-            }
-            chain.proceed()
-        }
-    }
+
     private fun Class<*>.addTargetHook() {
         val addTarget = getDeclaredMethod("addTarget", Surface::class.java)
         magic.hook(addTarget).intercept { chain ->
@@ -190,13 +220,9 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             val origin = chain.args[0] as Surface
             val (width, height, format) = NB.getSurfaceInfo(origin)
             Dog.i(TAG, "[:addTarget] ${origin.shortId}, format: $format, size: ${width}x${height}", SM.enableLog)
-            // dirty fix: in some app, addTarget run before createCaptureSession;
-            // just replace blackHole here, save origin surface in createCaptureSession.
-            if ((cachedOriginSurface.get() == null && (format == 1 || format == 34)) || origin == cachedOriginSurface.get()) {
-                val newArgs = chain.args.toTypedArray()
-                newArgs[0] = BlackHole.surface
-                return@intercept chain.proceed(newArgs)
-            }
+
+            if (format == 1 || format == 4) return@intercept chain.proceed(arrayOf(origin.gocBlackHole))
+            if (format == 35) NB.updateAlgorithmSize(width, height)
             return@intercept chain.proceed()
         }
     }
@@ -208,10 +234,8 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             val origin = chain.args[0] as Surface
             val (width, height, format) = NB.getSurfaceInfo(origin)
             Dog.i(TAG, "[:removeTarget] ${origin.shortId}, format: $format, size: ${width}x${height}", SM.enableLog)
-            if (origin != cachedOriginSurface.get()) return@intercept chain.proceed()
-            val newArgs = chain.args.toTypedArray()
-            newArgs[0] = BlackHole.surface
-            return@intercept chain.proceed(newArgs)
+            val oab = origin.getBlackHole ?: origin
+            return@intercept chain.proceed(arrayOf(oab))
         }
     }
 }

@@ -41,7 +41,6 @@ class MagicHook : XposedModule() {
         hook(onCreate).intercept { chain ->
             val app =  chain.thisObject as Application
             GlobalState.appContext = app.also {
-                if (mainProcess) it.initCamera3()
                 registerForegroundChecker(it)
             }
             return@intercept chain.proceed()
