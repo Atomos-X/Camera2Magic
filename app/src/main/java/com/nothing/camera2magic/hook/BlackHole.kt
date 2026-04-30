@@ -43,8 +43,6 @@ object BlackHole {
     private val Surface.isValid: Boolean
         get() = this.isValid
 
-
-
     fun clear() {
         dummyTexId = 0x100
         _oab.values.forEach { bh ->

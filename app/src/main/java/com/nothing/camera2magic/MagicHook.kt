@@ -5,7 +5,6 @@ import android.app.Application
 import android.os.Bundle
 import android.widget.Toast
 import com.nothing.camera2magic.hook.Camera1Hooker
-import com.nothing.camera2magic.hook.Camera3.initCamera3
 import com.nothing.camera2magic.hook.Camera2Hooker
 import com.nothing.camera2magic.hook.SourceManager as SM
 import com.nothing.camera2magic.hook.ImageReaderHooker
@@ -16,16 +15,11 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 class MagicHook : XposedModule() {
     companion object {
         private const val TAG = "[MagicHook]"
-        private lateinit var packageName: String
-
-        private val mainProcess: Boolean
-            get() = Application.getProcessName() == packageName
     }
     init { System.loadLibrary("camera3") }
 
     override fun onPackageReady(param: PackageReadyParam) {
         if (!param.isFirstPackage) return
-        packageName = param.packageName
         GlobalState.processName = Application.getProcessName()
         val remotePrefs = getRemotePreferences("camera_magic_config")
         SM.init(remotePrefs)

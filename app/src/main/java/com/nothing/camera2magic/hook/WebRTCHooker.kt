@@ -25,10 +25,9 @@ class WebRTCHooker(val magic: MagicHook, param: PackageReadyParam) : HookManager
                 handleMessage(msg)
             }
             if (tag == "Camera2Session" && msg.contains("Stop Camera2 session", ignoreCase = true)) {
-                Camera3.stop()
+                Camera3().stop()
                 NB.clearTargets()
                 BlackHole.clear()
-                Camera3.clearHijackedList()
                 manualRotation = 0
                 NB.updateManualRotation(0)
             }

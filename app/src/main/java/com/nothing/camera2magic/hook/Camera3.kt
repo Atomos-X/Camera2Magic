@@ -24,6 +24,7 @@ import androidx.media3.datasource.DataSource
 
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.utils.Dog
 
@@ -33,20 +34,26 @@ import java.util.concurrent.atomic.AtomicBoolean
 import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.hook.SourceManager as SM
 
-object Camera3 {
-    private const val TAG = "[Camera3]"
-    private val surfaceIsHijacked = Collections.newSetFromMap(ConcurrentHashMap<Surface, Boolean>())
-    @Volatile
-    private var initialized = AtomicBoolean(false)
-    private var player: ExoPlayer? = null
-    private var pfd: ParcelFileDescriptor? = null
-    private var imageRendering: Boolean = false
-    private var cachedBitmap: Bitmap? = null
-    private var oesTextureId: Int = 0
-    private var surface: Surface? = null
-    private var surfaceTexture: SurfaceTexture? = null
-    private lateinit var thread: HandlerThread
-    private lateinit var camera3Handler: Handler
+class Camera3 {
+
+    companion object {
+        private const val TAG = "[Camera3]"
+
+        private val camera3Handler = Camera3Extended.handler
+
+        private val context: Context get() = GlobalState.appContext
+
+        @Volatile
+        private var initialized = AtomicBoolean(false)
+        private var player: ExoPlayer? = null
+        private var pfd: ParcelFileDescriptor? = null
+        private var imageRendering: Boolean = false
+        private var cachedBitmap: Bitmap? = null
+        private var oesTextureId: Int = 0
+        private var surface: Surface? = null
+        private var surfaceTexture: SurfaceTexture? = null
+    }
+
     enum class State { IDLE, BUFFERING, READY, ENDED, PLAYING, PAUSE, ERROR }
     var onPlayerStateChangeListener: ((state: State) -> Unit)? = null
 
@@ -81,49 +88,41 @@ object Camera3 {
         }
     }
 
-    fun Context.initCamera3() {
-
+    fun init() {
         if (!initialized.compareAndSet(false, true)) return
-
-        thread = HandlerThread("camera3").apply { start() }
-        camera3Handler = Handler(thread.looper)
-
-        camera3Handler.post {
-
-            oesTextureId = NB.createOESTexture()
-            surfaceTexture = SurfaceTexture(oesTextureId).apply {
-                setDefaultBufferSize(16, 16)
-                setOnFrameAvailableListener({ _ ->
-                    NB.notifyFrameAvailable()
-                }, camera3Handler)
-            }
-
-            NB.setSurfaceTexture(surfaceTexture!!)
-            player = ExoPlayer.Builder(this).build().apply {
-                repeatMode = Player.REPEAT_MODE_ALL
-                addListener(playerListener)
-            }
-            Dog.i(TAG, "camera3 initialized.", SM.enableLog)
+        oesTextureId = NB.createOESTexture()
+        surfaceTexture = SurfaceTexture(oesTextureId).apply {
+            setDefaultBufferSize(16, 16)
+            setOnFrameAvailableListener({ _ ->
+                NB.notifyFrameAvailable()
+            }, camera3Handler)
         }
+
+        NB.setSurfaceTexture(surfaceTexture!!)
+        surface = Surface(surfaceTexture)
+
+        player = ExoPlayer.Builder(GlobalState.appContext).build().apply {
+            repeatMode = Player.REPEAT_MODE_ALL
+            addListener(playerListener)
+        }
+        Dog.i(TAG, "camera3 client initialized.", SM.enableLog)
     }
 
     fun start(magic: MagicHook, validMedia: ValidMedia) {
+        camera3Handler.post {
+            init()
+            val (name, type) = validMedia
+            when (type) {
+                MagicType.NETWORK_RTSP -> {}
+                MagicType.LOCAL_VIDEO  -> {
+                    pfd = magic.openRemoteFile(name)
+                    pfd?.let { handleLocalVideo(it) }
+                }
 
-        if (!initialized.get()) return
-        if (surface == null) surface = Surface(surfaceTexture)
-
-        val (name, type) = validMedia
-
-        when (type) {
-            MagicType.NETWORK_RTSP -> {}
-            MagicType.LOCAL_VIDEO  -> {
-                pfd = magic.openRemoteFile(name)
-                pfd?.let { handleLocalVideo(it) }
-            }
-
-            MagicType.LOCAL_IMAGE -> {
-                pfd = magic.openRemoteFile(name)
-                pfd?.let { handleLocalImage(it) }
+                MagicType.LOCAL_IMAGE -> {
+                    pfd = magic.openRemoteFile(name)
+                    pfd?.let { handleLocalImage(it) }
+                }
             }
         }
     }
@@ -134,7 +133,6 @@ object Camera3 {
         val factory = DataSource.Factory { MagicDataSource(pfd) }
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
         val mediaItem = MediaItem.fromUri("LOCAL://VIDEO")
-
         camera3Handler.post {
             player?.apply {
                 volume = volumeValue
@@ -211,23 +209,23 @@ object Camera3 {
         camera3Handler.post {
             imageRendering = false
             camera3Handler.removeCallbacks(imageRenderRunnable)
-            player?.stop()
-            player?.clearVideoSurface()
-            player?.clearMediaItems()
+            player?.release()
             releaseResources()
+            initialized.set(false)
         }
     }
 
     fun releaseResources() {
-        surfaceIsHijacked.clear()
         if (cachedBitmap != null) {
             val tmp = cachedBitmap
             cachedBitmap = null
             tmp?.recycle()
         }
-        surfaceTexture?.setDefaultBufferSize(16, 16)
         surface?.release()
         surface = null
+        surfaceTexture?.release()
+        surfaceTexture = null
+        oesTextureId = 0
         pfd?.close()
         pfd = null
     }
@@ -247,18 +245,5 @@ object Camera3 {
             }
         }
         return inSampleSize
-    }
-
-    /**
-     * 将所有原始surface记录
-     */
-    fun markedAsHijacked(origin: Surface) {
-        surfaceIsHijacked.add(origin)
-    }
-    fun isHijacked(origin: Surface): Boolean {
-        return surfaceIsHijacked.contains(origin)
-    }
-    fun clearHijackedList() {
-        surfaceIsHijacked.clear()
     }
 }

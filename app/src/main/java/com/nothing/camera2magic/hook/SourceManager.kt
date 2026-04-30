@@ -69,7 +69,6 @@ object SourceManager {
             return
         }
 
-
         val type = MagicType.fromValue(selectedMedia)
         val label = type.label
 

@@ -17,7 +17,6 @@ import com.nothing.camera2magic.GlobalState
 import com.nothing.camera2magic.MagicHook
 import com.nothing.camera2magic.hook.BlackHole.getBlackHole
 import com.nothing.camera2magic.hook.BlackHole.gocBlackHole
-import com.nothing.camera2magic.hook.Camera3.initCamera3
 import com.nothing.camera2magic.hook.SourceManager as SM
 import com.nothing.camera2magic.hook.NativeBridge as NB
 import com.nothing.camera2magic.utils.Dog
@@ -36,6 +35,7 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         private const val CAMERA_MANAGER = "android.hardware.camera2.CameraManager"
         private const val CAPTURE_REQUEST_BUILDER = $$"android.hardware.camera2.CaptureRequest$Builder"
         private var activatedCamera = WeakReference<Any>(null)
+        private val camera3Map = WeakHashMap<Any, Camera3>()
         private val processName: String
             get() = GlobalState.processName
         private val CameraDevice.isActiveRef: Boolean
@@ -82,10 +82,9 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
     private fun Class<*>.onOpenedHook() {
         val onOpened = getDeclaredMethod("onOpened", CameraDevice::class.java)
         magic.hook(onOpened).intercept { chain ->
-
             val camera = chain.args[0] as CameraDevice
             camera.updateBaseData()
-            Dog.w(TAG, "open camera: ${camera.shortId}", SM.enableLog)
+            Dog.w(TAG, "API[2] open camera: ${camera.shortId}", SM.enableLog)
             return@intercept chain.proceed()
         }
     }
@@ -95,12 +94,11 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         magic.hook(onClosed).intercept { chain ->
             val camera = chain.args[0] as CameraDevice
             if (camera.isActiveRef) {
-                Camera3.stop()
-                NB.clearTargets()
+                camera3Map[camera]?.stop()
                 BlackHole.clear()
-                Camera3.clearHijackedList()
+                Dog.w(TAG, "API[2] close camera: ${camera.shortId}", SM.enableLog)
             }
-            Dog.w(TAG, "close camera: ${camera.shortId}", SM.enableLog)
+
             return@intercept chain.proceed()
         }
     }
@@ -108,7 +106,6 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
         val openCamera = getDeclaredMethod("openCamera",
             String::class.java, CameraDevice.StateCallback::class.java, Handler::class.java)
         magic.hook(openCamera).intercept { chain ->
-            GlobalState.appContext.initCamera3()
             val stateCallBack = chain.args[1] as CameraDevice.StateCallback
             stateCallBack.javaClass.safeHook {
                 onOpenedHook()
@@ -135,9 +132,15 @@ class Camera2Hooker(val magic: MagicHook, param: PackageReadyParam) : HookManage
             CameraCaptureSession::class.java)
 
         magic.hook(onConfigured).intercept { chain ->
+            val session = chain.args[0] as CameraCaptureSession
+            val camera = session.device
             Dog.i(TAG, "[:onConfigured] ${BlackHole.originSurfaces.size} surface need to send.", SM.enableLog)
             BlackHole.originSurfaces.forEach { NB.addRenderTarget(it) }
-            SM.validMedia?.let { Camera3.start(magic, it) }
+            SM.validMedia?.let {
+                val camera3 = Camera3()
+                camera3Map[camera] = camera3
+                camera3.start(magic, it)
+            }
             return@intercept chain.proceed()
         }
     }
