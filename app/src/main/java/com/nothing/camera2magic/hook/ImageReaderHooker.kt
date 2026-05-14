@@ -59,7 +59,7 @@ class ImageReaderHooker(val magic: MagicHook, param: PackageReadyParam) : HookMa
                 return@intercept image
             }
 
-            //if (format == 35) handleFormat35(image)
+            if (format == 35) handleFormat35(image)
 
             return@intercept image
         }
