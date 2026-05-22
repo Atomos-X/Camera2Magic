@@ -32,6 +32,8 @@ def gitCommitCount = getGitCommitCount()
 
 def startTasks = gradle.startParameter.taskNames
 def isExplicitNativeBuild = startTasks.any { it.contains("buildNative") }
+def prebuiltNativeLibs = fileTree(dir: "src/main/jniLibs", include: "**/libcamera3.so")
+def usePrebuiltNativeLibs = !isExplicitNativeBuild && !prebuiltNativeLibs.isEmpty()
 
 android {
     flavorDimensions.add("api")
@@ -55,10 +57,12 @@ android {
         versionCode versionCodeOffset + gitCommitCount
         versionName "${majorVersion}.${minorVersion}.${patchVersion}"
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += ""
-                arguments "-DANDROID_PLATFORM=android-29"
+        if (!usePrebuiltNativeLibs) {
+            externalNativeBuild {
+                cmake {
+                    cppFlags += ""
+                    arguments "-DANDROID_PLATFORM=android-29"
+                }
             }
         }
 
@@ -95,10 +99,12 @@ android {
         jvmTarget = '11'
     }
 
-    externalNativeBuild {
-        cmake {
-            path file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    if (!usePrebuiltNativeLibs) {
+        externalNativeBuild {
+            cmake {
+                path file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
         }
     }
 
@@ -121,8 +127,7 @@ android {
 
 afterEvaluate {
     if (!isExplicitNativeBuild) {
-        def jniLibTree = fileTree(dir: "src/main/jniLibs", include: "**/libcamera3.so")
-        if (jniLibTree.isEmpty()) {
+        if (!usePrebuiltNativeLibs) {
             println ">>> [警告] jniLibs 文件不存在， 无法快速编译 <<<"
             return
         }
