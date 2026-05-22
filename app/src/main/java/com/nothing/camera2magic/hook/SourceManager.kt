@@ -4,6 +4,9 @@ import android.content.ContentUris
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
+import android.net.Uri
 import android.provider.MediaStore
 import com.nothing.camera2magic.GlobalState
 import java.io.FileNotFoundException
@@ -155,6 +158,7 @@ object SourceManager {
         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId)
         val contentResolver = GlobalState.appContext.contentResolver
         val result = runCatching {
+            val exifOrientation = readExifOrientation(uri)
             val options = BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
                 contentResolver.openInputStream(uri)?.use {
@@ -169,10 +173,14 @@ object SourceManager {
             val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
                 BitmapFactory.decodeStream(stream, null, options)
             } ?: throw IllegalStateException("无法解码图片")
+            val orientedBitmap = applyExifOrientation(bitmap, exifOrientation)
 
             try {
-                NativeBridge.processBitmap(bitmap)
+                NativeBridge.processBitmap(orientedBitmap)
             } finally {
+                if (orientedBitmap !== bitmap) {
+                    orientedBitmap.recycle()
+                }
                 bitmap.recycle()
             }
         }
@@ -187,6 +195,39 @@ object SourceManager {
             }
             updateState(false, msg)
         }
+    }
+
+    private fun readExifOrientation(uri: Uri): Int {
+        val contentResolver = GlobalState.appContext.contentResolver
+        return runCatching {
+            contentResolver.openInputStream(uri)?.use { stream ->
+                ExifInterface(stream).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+            } ?: ExifInterface.ORIENTATION_NORMAL
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    }
+
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(-90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            else -> return bitmap
+        }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
