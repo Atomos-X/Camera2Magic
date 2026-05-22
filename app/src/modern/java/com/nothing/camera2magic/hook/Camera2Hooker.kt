@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.os.Handler
+import android.view.Surface as AndroidSurface
 import android.view.Surface
 import android.view.WindowManager
 import com.nothing.camera2magic.GlobalState
@@ -85,12 +86,30 @@ object Camera2Hooker {
         val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         @Suppress("DEPRECATION")
         val rotation = wm.defaultDisplay.rotation
+        val deviceDegrees = when (rotation) {
+            AndroidSurface.ROTATION_90 -> 90
+            AndroidSurface.ROTATION_180 -> 180
+            AndroidSurface.ROTATION_270 -> 270
+            else -> 0
+        }
+        val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        val facingFront = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        val displayOrientation = if (facingFront) {
+            (360 - ((sensorOrientation + deviceDegrees) % 360)) % 360
+        } else {
+            (sensorOrientation - deviceDegrees + 360) % 360
+        }
 
         this.apiLevel = 2
-        this.sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
-        this.facingFront = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        this.displayOrientation = rotation * 90
+        this.sensorOrientation = sensorOrientation
+        this.facingFront = facingFront
+        this.displayOrientation = displayOrientation
         this.packageName = GlobalState.packageName
+        Dog.i(
+            TAG,
+            "camera[$cameraIdStr] sensor=$sensorOrientation device=$deviceDegrees display=$displayOrientation front=$facingFront",
+            SourceManager.enableLog
+        )
     }
     private fun CameraState.bindSurface(info: SurfaceInfo) {
         val surface = info.surface
