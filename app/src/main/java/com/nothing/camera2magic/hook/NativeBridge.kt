@@ -71,6 +71,10 @@ object NativeBridge {
         synchronized(surfaceLock) {
             val lastSurface = lastRegisteredSurface?.get()
             state.surface?.let { surface ->
+                if (!surface.isValid) {
+                    Dog.e(TAG, "Skip invalid surface registration.", null, SourceManager.enableLog)
+                    return
+                }
                 if (forceRefresh || surface != lastSurface) {
                     registerSurface(cameraState = state)
                     lastRegisteredSurface = WeakReference(surface)

@@ -2,6 +2,7 @@ package com.nothing.camera2magic.viewmodel
 
 import android.app.Application
 import android.content.ContentUris
+import android.provider.DocumentsContract
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
@@ -61,9 +62,7 @@ class SpotlightViewModel(
 
     fun onMediaSelected(type: MediaType, uri: Uri?) {
         if (uri == null) return
-        val mediaId = try {
-            uri.lastPathSegment?.toLongOrNull()
-        } catch (_: kotlin.Exception) { null }
+        val mediaId = resolveMediaId(type, uri)
         if (mediaId != null) {
             saveMediaId(type, mediaId)
             loadAndVerifyMedia(type, mediaId)
@@ -103,6 +102,31 @@ class SpotlightViewModel(
             MediaType.IMAGE -> repository.imageId
         }
     }
+
+    private fun resolveMediaId(type: MediaType, uri: Uri): Long? {
+        uri.lastPathSegment?.toLongOrNull()?.let { return it }
+
+        val documentId = runCatching {
+            if (DocumentsContract.isDocumentUri(app, uri)) {
+                DocumentsContract.getDocumentId(uri)
+            } else {
+                null
+            }
+        }.getOrNull()
+        documentId?.substringAfter(':')?.toLongOrNull()?.let { return it }
+        documentId?.toLongOrNull()?.let { return it }
+
+        val projection = when (type) {
+            MediaType.VIDEO -> arrayOf(MediaStore.Video.Media._ID)
+            MediaType.IMAGE -> arrayOf(MediaStore.Images.Media._ID)
+        }
+        return runCatching {
+            app.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getLong(0) else null
+            }
+        }.getOrNull()
+    }
+
     private fun loadAndVerifyMedia(type: MediaType, mediaIdOverride: Long? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val mediaId = mediaIdOverride ?: getMediaId(type)
