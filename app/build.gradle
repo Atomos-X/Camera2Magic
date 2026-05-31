@@ -9,7 +9,7 @@ plugins {
 // 版本控制变量 version for camera3
 def majorVersion = 1
 def minorVersion = 1
-def patchVersion = 1
+def patchVersion = 2
 def versionCodeOffset = 0 // 保持与旧版本兼容的偏移量
 
 def getGitCommitHash = { ->
