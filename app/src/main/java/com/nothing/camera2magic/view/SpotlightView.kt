@@ -2,7 +2,10 @@ package com.nothing.camera2magic.view
 
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nothing.camera2magic.viewmodel.SpotlightViewModel
 import com.nothing.camera2magic.R
@@ -43,6 +47,7 @@ import com.nothing.camera2magic.utils.Dog
 import com.nothing.camera2magic.viewmodel.LocalViewModelFactory
 import com.nothing.camera2magic.viewmodel.MediaSource
 import com.nothing.camera2magic.viewmodel.MediaType
+import kotlinx.coroutines.launch
 import kotlin.enums.EnumEntries
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,21 +61,28 @@ fun SpotlightView() {
     val factory = LocalViewModelFactory.current
     val viewModel: SpotlightViewModel = viewModel(factory = factory)
 
-    val mediaThumbnails by viewModel.thumbnails.collectAsState()
-
     val uiState by viewModel.uiState.collectAsState()
 
     var pendingType by remember { mutableStateOf<MediaType?>(null) }
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+    val pickMediaLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         pendingType?.let { type ->
-            viewModel.onMediaSelected(type, it)
+            if (uri == null) return@let
+            viewModel.updateThumbnailState(type, null)
+            viewModel.onMediaSelected(type, uri)
         }
     }
 
     val pickMedia = { type: MediaType ->
+        Dog.w("[Spotlight view]", "pick media: $type", true)
         pendingType = type
-        launcher.launch(type.mimeType)
+        val request = PickVisualMediaRequest(
+            when(type) {
+                MediaType.VIDEO -> PickVisualMedia.VideoOnly
+                MediaType.IMAGE -> PickVisualMedia.ImageOnly
+            }
+        )
+        pickMediaLauncher.launch(request)
     }
 
     Card(
@@ -88,8 +100,9 @@ fun SpotlightView() {
             Spacer(modifier = Modifier.height(16.dp))
             MediaPreviewGrid(
                 mediaTypes = mediaTypes,
-                thumbnails = mediaThumbnails,
+                thumbnails = uiState.thumbnails,
                 currentType = uiState.currentType,
+                processingMedia = uiState.processingMedia,
                 onPickMedia = { type -> pickMedia(type) },
                 onClearMedia = { type -> viewModel.clearMediaBy(type)},
                 onTypeSelected = { type -> viewModel.setCurrentMediaType(type) }
@@ -131,11 +144,84 @@ private fun MediaSourceSelector(
     }
 }
 
+
+@Composable
+private fun MediaThumbnailCard(
+    modifier: Modifier = Modifier,
+    mediaType: MediaType,
+    thumbnail: Bitmap?,
+    isProcessing: Boolean,
+    onClick: () -> Unit,
+    onClear: () -> Unit
+) {
+    var inDeleteMode by remember { mutableStateOf(false) }
+
+    fun handleOnclick() {
+        if (isProcessing) return
+        if (inDeleteMode) {
+            inDeleteMode = false
+        } else {
+            onClick()
+        }
+    }
+
+    fun handleOnLongClick() {
+        if (thumbnail != null && !isProcessing) {
+            inDeleteMode = true
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .aspectRatio(9f / 16f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .combinedClickable(
+                enabled = !isProcessing,
+                onClick = ::handleOnclick,
+                onLongClick = ::handleOnLongClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        ThumbnailContent(thumbnail, mediaType)
+
+        DeleteModeOverlay(visible = inDeleteMode && !isProcessing) {
+            onClear()
+            inDeleteMode = false
+        }
+
+        ProcessingOverlay(visible = isProcessing)
+    }
+}
+
+@Composable
+private fun ProcessingOverlay(visible: Boolean) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f)),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                color = Color.White,
+                strokeWidth = 3.dp
+            )
+        }
+    }
+}
+
 @Composable
 private fun MediaPreviewGrid(
     mediaTypes: EnumEntries<MediaType>,
     thumbnails: Map<MediaType, Bitmap?>,
     currentType: MediaType,
+    processingMedia: Set<MediaType>,
     onPickMedia: (MediaType) -> Unit,
     onClearMedia: (MediaType) -> Unit,
     onTypeSelected: (MediaType) -> Unit,
@@ -150,6 +236,7 @@ private fun MediaPreviewGrid(
                 MediaThumbnailCard(
                     thumbnail = thumbnails[type],
                     mediaType = type,
+                    isProcessing = type in processingMedia,
                     onClick = { onPickMedia(type) },
                     onClear = { onClearMedia(type) }
                 )
@@ -159,50 +246,6 @@ private fun MediaPreviewGrid(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun MediaThumbnailCard(
-    modifier: Modifier = Modifier,
-    mediaType: MediaType,
-    thumbnail: Bitmap?,
-    onClick: () -> Unit,
-    onClear: () -> Unit
-) {
-    var isInDeleteMode by remember { mutableStateOf(false) }
-
-    fun handleOnClick() {
-        if (isInDeleteMode) {
-            isInDeleteMode = false
-        } else {
-            onClick()
-        }
-    }
-
-    fun handleOnLongClick() {
-        if (thumbnail != null) {
-            isInDeleteMode = true
-        }
-    }
-
-    fun handleOnClear() {
-        onClear()
-        isInDeleteMode = false
-    }
-
-    Box(
-        modifier = modifier
-            .aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .combinedClickable(
-                onClick = ::handleOnClick,
-                onLongClick = ::handleOnLongClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        ThumbnailContent(thumbnail, mediaType)
-        DeleteModeOverlay(isInDeleteMode, ::handleOnClear)
     }
 }
 
@@ -235,11 +278,7 @@ private fun DeleteModeOverlay(visible: Boolean, onClear: () -> Unit) {
         Box(
             modifier = Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Black.copy(alpha = 0.6f),
-                        Color.Transparent,
-                        Color.Transparent
-                    )
+                    colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent, Color.Transparent)
                 )
             )
         ){
@@ -319,12 +358,8 @@ fun OnLifecycleEvent(onEvent: (event: Lifecycle.Event) -> Unit) {
     val lifecycleOwner by rememberUpdatedState(LocalLifecycleOwner.current)
 
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            eventHandler(event)
-        }
+        val observer = LifecycleEventObserver { _, event -> eventHandler(event) }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 }

@@ -15,7 +15,7 @@ class ViewModelFactory(
                 SpotlightViewModel(app, repository) as T
             }
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
-                SettingsViewModel(repository) as T
+                SettingsViewModel(app, repository) as T
             }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

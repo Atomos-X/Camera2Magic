@@ -1,41 +1,49 @@
 package com.nothing.camera2magic.viewmodel
 
 import android.app.Application
-import android.content.ContentUris
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.provider.MediaStore
 import android.util.Size
+import android.webkit.MimeTypeMap
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nothing.camera2magic.hook.SourceManager
 import com.nothing.camera2magic.utils.Dog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.lang.Exception
+import androidx.core.net.toUri
+import kotlinx.coroutines.withContext
 
 data class SpotlightUiState(
     val moduleEnabled: Boolean = true,
+    val isProcessing: Boolean = false,
     val selectedMediaSource: MediaSource = MediaSource.LOCAL,
     val currentType: MediaType = MediaType.VIDEO,
+
+    val thumbnails: Map<MediaType, Bitmap?> = emptyMap(),
+    val processingMedia: Set<MediaType> = emptySet()
 )
 
 class SpotlightViewModel(
     private val app: Application,
     private val repository: ConfigRepository
 ) : ViewModel() {
-    companion object {
-        private const val TAG = "[Spotlight ViewModel]"
-    }
-
-    private val _thumbnails = MutableStateFlow<Map<MediaType, Bitmap?>>(emptyMap())
-    val thumbnails = _thumbnails.asStateFlow()
 
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState = _uiState.asStateFlow()
+
+    private fun updateState(reducer: (SpotlightUiState) -> SpotlightUiState) {
+        _uiState.update { reducer(it) }
+    }
+
+    companion object {
+        private const val TAG = "[Spotlight VM]"
+    }
 
     init {
         loadInitialSettings()
@@ -64,36 +72,87 @@ class SpotlightViewModel(
         }
     }
 
-    fun onMediaSelected(type: MediaType, uri: Uri?) {
-        if (uri == null) return
-        Dog.i(TAG, "${type.mimeType}, $uri", repository.enableLog)
-        val mediaId = try {
-            uri.lastPathSegment?.toLongOrNull()
-        } catch (_: kotlin.Exception) { null }
-        if (mediaId != null) {
-            saveMediaId(type, mediaId)
-            loadAndVerifyMedia(type, mediaId)
+    fun onMediaSelected(type: MediaType, uri: Uri) {
+        // 撤销旧uri权限
+        getMediaUri(type)?.let {
+            try {
+                app.contentResolver.releasePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: Exception) {/* 忽略错误 */}
+        }
+
+        updateState { it.copy(
+            processingMedia = it.processingMedia + type,
+            thumbnails = it.thumbnails + (type to null)
+        )}
+
+        try {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            app.contentResolver.takePersistableUriPermission(uri, takeFlags)
+        } catch (e: Exception) {
+            Dog.e(TAG, "Failed to take persistable permission", e, repository.enableLog)
+        }
+
+        viewModelScope.launch {
+            val mimeType = app.contentResolver.getType(uri)
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+            val fileName = if (extension != null) "${type.label}.${extension}" else type.label
+            val success = withContext(Dispatchers.IO) {
+                runCatching {
+                    app.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        repository.prepareRemoteMedia(fileName, inputStream)
+                    } ?: false
+
+                }.getOrDefault(false)
+            }
+
+            if (success) {
+                saveRemoteFileName(type, fileName)
+                loadAndVerifyMedia(type, uri)
+            } else {
+                clearMediaBy(type)
+            }
+
+            updateState { it.copy(processingMedia = it.processingMedia - type) }
         }
     }
     fun clearMediaBy(type: MediaType) {
         when (type) {
-            MediaType.VIDEO -> repository.videoId = -1L
-            MediaType.IMAGE -> repository.imageId = -1L
+            MediaType.VIDEO -> {
+                repository.remoteVideoFile?.let { repository.deleteRemoteMedia(it) }
+                repository.videoUri = null
+                repository.remoteVideoFile = null
+            }
+
+            MediaType.IMAGE -> {
+                repository.remoteImageFile?.let { repository.deleteRemoteMedia(it) }
+                repository.imageUri = null
+                repository.remoteImageFile = null
+            }
         }
         updateThumbnailState(type, null)
     }
     fun performHealthCheckAndRefresh() {
-        MediaType.entries.forEach { type ->
-            loadAndVerifyMedia(type)
+        viewModelScope.launch {
+            MediaType.entries.forEach { type ->
+                loadAndVerifyMedia(type)
+            }
         }
     }
 
-    private fun saveMediaId(type: MediaType, id: Long) {
+    private fun saveMediaUri(type: MediaType, uri: String?) {
         when (type) {
-            MediaType.VIDEO -> repository.videoId = id
-            MediaType.IMAGE -> repository.imageId = id
+            MediaType.VIDEO -> repository.videoUri = uri
+            MediaType.IMAGE -> repository.imageUri = uri
         }
     }
+
+    private fun saveRemoteFileName(type: MediaType, fileName: String) {
+        when(type) {
+            MediaType.VIDEO -> repository.remoteVideoFile = fileName
+            MediaType.IMAGE -> repository.remoteImageFile = fileName
+        }
+    }
+
     private fun loadInitialSettings() {
         _uiState.update {
             it.copy(
@@ -103,50 +162,39 @@ class SpotlightViewModel(
             )
         }
     }
-    private fun getMediaId(type: MediaType): Long {
+    private fun getMediaUri(type: MediaType): Uri? {
         return when (type) {
-            MediaType.VIDEO -> repository.videoId
-            MediaType.IMAGE -> repository.imageId
+            MediaType.VIDEO -> repository.videoUri?.toUri()
+            MediaType.IMAGE -> repository.imageUri?.toUri()
         }
     }
-    private fun loadAndVerifyMedia(type: MediaType, mediaIdOverride: Long? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val mediaId = mediaIdOverride ?: getMediaId(type)
-            if (mediaId == -1L) {
+
+    private suspend fun loadAndVerifyMedia(type: MediaType, uriOverride: Uri? = null) {
+        withContext(Dispatchers.IO) {
+            val targetUri = uriOverride ?: getMediaUri(type)
+            if (targetUri == null) {
                 updateThumbnailState(type, null)
-                return@launch
+                return@withContext
             }
 
-            var thumbnail: Bitmap? = null
-            var isMediaValid = false
+            val thumbnail = runCatching {
+                app.contentResolver.loadThumbnail(targetUri, Size(512, 512), null)
+            }.getOrNull()
 
-            try {
-                val contentUri = when (type) {
-                    MediaType.VIDEO -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                    MediaType.IMAGE -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                }
-
-                val uri = ContentUris.withAppendedId(contentUri, mediaId)
-                app.contentResolver.openFileDescriptor(uri, "r")?.use {
-                    isMediaValid = true
-                    thumbnail = app.contentResolver.loadThumbnail(uri, Size(720, 1280), null)
-                }
-            } catch (_: Exception) {
-                isMediaValid = false
-            }
-            if (isMediaValid) {
+            if (thumbnail != null) {
                 updateThumbnailState(type, thumbnail)
+                saveMediaUri(type, targetUri.toString())
             } else {
                 updateThumbnailState(type, null)
-                if (mediaIdOverride == null) {
-                    saveMediaId(type, -1L)
-                }
+                clearMediaBy(type)
+                //if (uriOverride == null) saveMediaUri(type, null)
             }
         }
     }
-    private fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
-        _thumbnails.update { currentMap ->
-            currentMap + (type to thumbnail)
-        }
+
+    fun updateThumbnailState(type: MediaType, thumbnail: Bitmap?) {
+        updateState { it.copy(
+            thumbnails = it.thumbnails + (type to thumbnail)
+        ) }
     }
 }

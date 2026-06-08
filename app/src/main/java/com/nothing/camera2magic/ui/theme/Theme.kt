@@ -252,16 +252,12 @@ data class ColorFamily(
     val onColorContainer: Color
 )
 
-val unspecified_scheme = ColorFamily(
-    Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified
-)
-
 @Composable
 fun VirtualCameraXTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
-    content: @Composable() () -> Unit
+    content: @Composable () -> Unit
 ) {
   val colorScheme = when {
       dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -278,6 +274,7 @@ fun VirtualCameraXTheme(
             val window = (view.context as Activity).window
 
             // 1. 设置状态栏背景颜色为透明，使其与应用背景融合
+            @Suppress("DEPRECATION")
             window.statusBarColor = Color.Transparent.toArgb()
 
             // 2. 根据主题是亮色还是暗色，来设置状态栏文字的颜色
