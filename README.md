@@ -12,8 +12,7 @@
   - 待施工：添加一个强制CPU兜底开关（可能会解决mtk黑屏，但是性能垃圾）
 
 https://github.com/user-attachments/assets/cb4ec085-04c5-4512-9252-bdea9a72470d
-
-**新版本的技术验证阶段已经结束, 访问仓库screenshots目录可以访问截图，在任意相机流注入水印: 画面中心的圆形图标**  
+  
 **测试机硬件信息：snapdragon 865（sm8250）/ LineageOS 23.2；可能也许基于`AOSP`/`LineageOS`以及基于它们的变种版本都能很好的工作，本人日常不用android设备，所以没有其他测试机，兼容性不会作任何保证**
 
 **任何非本仓库(fork)提供的`Camera2Magic`均与本人无关，任何利用本人代码以及预编译文件进行二次修改的行为本人毫不知情！！**
